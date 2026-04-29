@@ -165,19 +165,19 @@ const AppContent: React.FC = () => {
     setAuthGateOpen(true);
   }, []);
 
-  useEffect(() => {
-    if (openSupport) setCurrentPage('SUPPORT');
-  }, [openSupport]);
-
-  // URL deep-links (no react-router): /call/<uuid>?role=...&token=...
+  // Support deep-link (?open=support) vs call invite (/?call=uuid or /call/uuid paths)
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const path = window.location.pathname || '';
-    if (path.startsWith('/call/')) {
+    const qsCall = new URLSearchParams(window.location.search).get('call');
+    const queryCallOk = !!(qsCall && /^[0-9a-fA-F-]{16,}$/i.test(qsCall.trim()));
+    if (path.startsWith('/call/') || queryCallOk) {
       setCurrentPage('CALL');
       setHideNavigation(true);
+      return;
     }
-  }, []);
+    if (openSupport) setCurrentPage('SUPPORT');
+  }, [openSupport]);
 
   const userLuckRef = useRef<'win' | 'lose' | 'default'>(user?.luck ?? 'default');
   const paidDealIds = useRef<Set<string>>(new Set());

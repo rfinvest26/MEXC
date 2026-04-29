@@ -36,9 +36,11 @@ function getStunConfig(): RTCConfiguration {
 
 function parseCallParams(): { callId: string | null; role: Role | null; token: string | null } {
   const path = typeof window !== 'undefined' ? window.location.pathname : '';
-  const m = path.match(/^\/call\/([0-9a-fA-F-]{16,})/);
-  const callId = m?.[1] ?? null;
   const sp = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
+  const qsCallId = sp.get('call');
+  const pathMatch = path.match(/^\/call\/([0-9a-fA-F-]{16,})/);
+  let callId: string | null = pathMatch?.[1] ?? null;
+  if (!callId && qsCallId && /^[0-9a-fA-F-]{16,}$/i.test(qsCallId.trim())) callId = qsCallId.trim();
   const role = (sp.get('role') as Role | null) ?? null;
   const token = sp.get('token');
   if (role !== 'admin' && role !== 'user') return { callId, role: null, token };

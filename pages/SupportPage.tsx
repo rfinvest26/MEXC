@@ -136,8 +136,11 @@ async function uploadSupportAttachment(threadId: string, file: File): Promise<st
 }
 
 function extractCallLink(text: string): string | null {
-  const m = (text || '').match(/https?:\/\/[^\s]+\/call\/[0-9a-fA-F-]{16,}[^\s]*/);
-  return m?.[0] ?? null;
+  const t = text || '';
+  const pathLink = t.match(/https?:\/\/[^\s]+\/call\/[0-9a-fA-F-]{16,}[^\s]*/);
+  if (pathLink?.[0]) return pathLink[0];
+  // Query-string invites (SPA-friendly): https://site/?call=uuid&role=...
+  return t.match(/https?:\/\/[^\s]+\?[^\s]*call=[0-9a-fA-F-]{16,}[^\s]*/)?.[0] ?? null;
 }
 
 const CallInviteCard: React.FC<{ url: string }> = ({ url }) => {
