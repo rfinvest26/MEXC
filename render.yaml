@@ -1,13 +1,14 @@
-# Render Blueprint — статический сайт (Vite + React SPA)
-# Монорепо: в Dashboard укажите Root Directory = neonflow-crypto-exchange
+# Render Blueprint (legacy, single-service).
+# Prefer using the repo-root `render.yaml` which deploys BOTH:
+# - MEXC frontend (static)
+# - tradebot (python worker)
 
 services:
   - type: web
-    name: neonflow-crypto-exchange
+    name: sellbitweb-mexc
     runtime: static
 
-    # Корень сервиса (если репо — монорепо sellbit)
-    rootDir: neonflow-crypto-exchange
+    rootDir: .
 
     buildCommand: npm ci && npm run build
     staticPublishPath: dist
