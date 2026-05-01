@@ -1,7 +1,6 @@
 /**
  * Символ для виджета TradingView: биржа + пара.
  * Крипта по умолчанию: BINANCE:XXXUSDT.
- * Forex: FX_IDC:EURUSD и т.д. (IDEALPRO / межбанк в TV).
  */
 
 import type { Asset } from '../types';
@@ -36,29 +35,19 @@ export function getTradingViewSymbolLabel(ticker: string): string {
   return `${ticker}USDT`;
 }
 
-/** Символ виджета по активу (крипта / forex / явный override). */
+/** Символ виджета по активу (крипта / акция / явный override). */
 export function getTradingViewSymbolForAsset(asset: Pick<Asset, 'ticker' | 'category' | 'tradingViewSymbol'>): string {
   if (asset.tradingViewSymbol) return asset.tradingViewSymbol;
-  if (asset.category === 'forex') return `FX_IDC:${asset.ticker}`;
+  if ((asset.category ?? 'crypto') === 'stock') {
+    return `NASDAQ:${asset.ticker}`;
+  }
   return getTradingViewSymbol(asset.ticker);
 }
 
-/** Подпись пары в UI (EUR/USD для forex). */
+/** Подпись пары в UI. */
 export function getTradingViewSymbolLabelForAsset(asset: Pick<Asset, 'ticker' | 'category'>): string {
-  if (asset.category === 'forex' && asset.ticker.length === 6) {
-    return `${asset.ticker.slice(0, 3)}/${asset.ticker.slice(3)}`;
-  }
+  if ((asset.category ?? 'crypto') === 'stock') return asset.ticker;
   return getTradingViewSymbolLabel(asset.ticker);
-}
-
-/** Отображение котировки FX (курс пары, не сумма в валюте счёта). */
-export function formatFxRateQuote(rate: number): string {
-  const abs = Math.abs(rate);
-  const digits = abs >= 10 ? 3 : 5;
-  return new Intl.NumberFormat('ru-RU', {
-    minimumFractionDigits: digits,
-    maximumFractionDigits: digits,
-  }).format(rate);
 }
 
 /** Стиль «Минималистичный нео-нуар»: фон #131722, свечи изумруд/коралл, сетка приглушённая */

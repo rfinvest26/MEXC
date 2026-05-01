@@ -35,14 +35,20 @@ export async function spotBuy(
   userId: number,
   ticker: string,
   amountRub: number,
-  priceRub: number
+  priceRub: number,
+  opts?: { nftAnchorEthRub?: number | null }
 ): Promise<SpotBuyResult> {
-  const { data, error } = await supabase.rpc('spot_buy', {
+  const body: Record<string, unknown> = {
     p_user_id: userId,
     p_ticker: ticker,
     p_amount_rub: amountRub,
     p_price_rub: priceRub,
-  });
+  };
+  const anchor = opts?.nftAnchorEthRub;
+  if (anchor != null && Number.isFinite(anchor) && anchor > 0) {
+    body.p_nft_anchor_eth_rub = anchor;
+  }
+  const { data, error } = await supabase.rpc('spot_buy', body);
   if (error) return { ok: false, error: getSupabaseErrorMessage(error, 'Ошибка операции') };
   const res = data as { ok?: boolean; error?: string; quantity?: number; avg_price_rub?: number };
   return { ok: res?.ok === true, error: res?.error, quantity: res?.quantity, avg_price_rub: res?.avg_price_rub };

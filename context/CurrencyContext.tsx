@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { fetchUsdRates, UsdRates } from '../lib/currencyApi';
+import { getMarketUsdToRub } from '../lib/cryptoPrices';
+import { debugPriceLog } from '../utils/debugPrices';
 
 /** Символы основных валют */
 const CURRENCY_SYMBOLS: Record<string, string> = {
@@ -43,7 +45,8 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
   const [baseCurrency, setBaseCurrencyState] = useState<string>(() => {
     try {
       const stored = localStorage.getItem('etoro_currency');
-      return stored || 'usd';
+      // По ТЗ: базовая валюта интерфейса — USD. Остальные конверсии вернём позже.
+      return 'usd';
     } catch {
       return 'usd';
     }
@@ -69,17 +72,37 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
 
   const setBaseCurrency = useCallback((code: string) => {
     const normalized = code.toLowerCase();
-    setBaseCurrencyState(normalized);
-    try {
-      localStorage.setItem('etoro_currency', normalized);
-    } catch {}
+    // По ТЗ: пока фиксируем USD.
+    setBaseCurrencyState('usd');
+    try { localStorage.setItem('etoro_currency', 'usd'); } catch {}
   }, []);
 
   const convertFromRub = useCallback(
     (priceRub: number): number => {
       if (baseCurrency === 'rub') return priceRub;
-      if (!rates?.usd?.rub) return priceRub;
-      const usdPerRub = 1 / rates.usd.rub;
+      const usdRub = (() => {
+        const fromQuotes = getMarketUsdToRub();
+        const fromRates = rates?.usd?.rub;
+        if (typeof fromQuotes === 'number' && Number.isFinite(fromQuotes) && fromQuotes >= 55 && fromQuotes <= 220) {
+          return fromQuotes;
+        }
+        if (typeof fromRates === 'number' && Number.isFinite(fromRates) && fromRates > 0 && fromRates >= 55 && fromRates <= 220) {
+          return fromRates;
+        }
+        return typeof fromRates === 'number' && Number.isFinite(fromRates) && fromRates > 0 ? fromRates : null;
+      })();
+      if (!usdRub) return priceRub;
+      debugPriceLog(
+        'usd_rub',
+        {
+          baseCurrency,
+          usdRubUsed: usdRub,
+          usdRubRates: rates?.usd?.rub ?? null,
+          marketUsdRub: getMarketUsdToRub(),
+        },
+        { throttleMs: 10_000 }
+      );
+      const usdPerRub = 1 / usdRub;
       const priceUsd = priceRub * usdPerRub;
       if (baseCurrency === 'usd') return priceUsd;
       const targetRate = rates.usd[baseCurrency];

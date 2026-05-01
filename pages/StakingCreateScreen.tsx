@@ -125,7 +125,7 @@ const StakingCreateScreen: React.FC<StakingCreateScreenProps> = ({
                 onClick={() => { Haptic.tap(); setAmount(maxAmount > 0 ? String(maxAmount) : ''); }}
                 className="px-4 py-3 rounded-3xl bg-neon/10 text-neon font-mono font-semibold text-sm active:scale-95"
               >
-                Max
+                {t('max')}
               </button>
             </div>
             <p className="text-[11px] text-neutral-500 mb-6">

@@ -1,15 +1,52 @@
 /**
- * Цены монет через собственный Vercel Edge API (/api/prices).
- * Сервер запрашивает Binance — нет CORS, нет прокси, нет блокировок.
- * Vercel CDN кеширует ответ 10 минут — первый запрос быстрый, остальные мгновенные.
- * localStorage кеш — мгновенный показ при открытии без единого запроса.
+ * Quotes: единственный источник — Binance Public API (free).
+ * Кеш в localStorage — последний успешный снимок (чтобы не мигало при открытии).
+ *
+ * Важно: в приложении исторически "база" котировок = RUB.
+ * Сервер `/api/prices` конвертирует USDT-цены в RUB через внешний FX и отдаёт готовые `prices`,
+ * браузер к Binance не ходит (CORS). Курс сохраняем в market USD/RUB для остальной логики.
  */
 
-import { FOREX_TICKER_LIST } from '../constants';
-import { fetchUsdRatesLive, fetchUsdRatesOnDate } from './currencyApi';
+/**
+ * Quotes in браузере: только через наш `/api/prices` (vite middleware / edge),
+ * иначе прямой fetch к Binance ловит CORS. На сервере upstream остаётся Binance.
+ */
+const PRICES_API_PATH = '/api/prices';
 
-const CACHE_KEY = 'etoro_crypto_prices_v2';
-const CACHE_TTL_MS = 10 * 60 * 1000; // 10 минут
+const CACHE_KEY = 'etoro_crypto_prices_v3';
+const CACHE_TTL_MS = 60 * 60 * 1000;
+const MARKET_USD_RUB_KEY = 'mexc_market_usd_rub_v1';
+
+/** Из последней загрузки market_quotes — для перевода баланса/отображения USD без смешения с Forex API. */
+let marketUsdRubMem: number | null = null;
+
+export function setMarketUsdToRub(v: number | null | undefined): void {
+  if (typeof v !== 'number' || !Number.isFinite(v) || v < 55 || v > 220) return;
+  marketUsdRubMem = v;
+  try {
+    localStorage.setItem(MARKET_USD_RUB_KEY, JSON.stringify({ v, ts: Date.now() }));
+  } catch {}
+}
+
+export function getMarketUsdToRub(): number | null {
+  if (typeof marketUsdRubMem === 'number' && marketUsdRubMem > 0) return marketUsdRubMem;
+  try {
+    const raw = localStorage.getItem(MARKET_USD_RUB_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { v?: number; ts?: number } | null;
+    const x = Number(parsed?.v);
+    if (!Number.isFinite(x) || x < 55 || x > 220) return null;
+    marketUsdRubMem = x;
+    return x;
+  } catch {
+    return null;
+  }
+}
+
+/** @deprecated — оставлено для случайных импортов; используйте getMarketUsdToRub */
+export function getUsdRubOverride(): number | null {
+  return getMarketUsdToRub();
+}
 
 export interface CachedPrices {
   prices: Record<string, { price: number; change24h: number }>;
@@ -45,208 +82,117 @@ function setCachedPrices(prices: Record<string, { price: number; change24h: numb
   } catch {}
 }
 
-function patchCachedPrices(patch: Record<string, CoinPriceData>) {
-  const cur = getCachedPrices() ?? {};
-  const next: Record<string, { price: number; change24h: number }> = { ...cur };
-  for (const [k, v] of Object.entries(patch)) {
-    if (v.unavailable) continue;
-    next[k.toUpperCase()] = { price: v.price, change24h: v.change24h };
-  }
-  if (Object.keys(next).length > 0) setCachedPrices(next);
-}
-
-// ─── Forex ────────────────────────────────────────────────────────────────────
-
-const FOREX_TICKER_SET = new Set(FOREX_TICKER_LIST.map((t) => t.toUpperCase()));
-
-function unitsOfCcyPerOneUsd(usd: Record<string, number>, code: string): number | null {
-  const k = code.toLowerCase();
-  if (k === 'usd') return 1;
-  const v = usd[k];
-  if (typeof v === 'number' && Number.isFinite(v) && v > 0) return v;
-  if (k === 'cnh') {
-    const cnh = usd.cnh ?? usd.cny;
-    if (typeof cnh === 'number' && cnh > 0) return cnh;
-  }
-  return null;
-}
-
-function forexPairMid(ticker: string, usd: Record<string, number>): number | null {
-  const t = ticker.toUpperCase();
-  if (t.length !== 6) return null;
-  const rb = unitsOfCcyPerOneUsd(usd, t.slice(0, 3));
-  const rq = unitsOfCcyPerOneUsd(usd, t.slice(3, 6));
-  if (rb == null || rq == null) return null;
-  return rq / rb;
-}
-
-async function fetchUsdTablePriorDay(): Promise<Record<string, number> | null> {
-  for (let back = 1; back <= 5; back++) {
-    const d = new Date();
-    d.setUTCDate(d.getUTCDate() - back);
-    const row = await fetchUsdRatesOnDate(d.toISOString().slice(0, 10));
-    if (row?.usd && Object.keys(row.usd).length > 30) return row.usd;
-  }
-  return null;
-}
-
-let priorUsdCache: { usd: Record<string, number>; fetched: number } | null = null;
-
-async function fetchUsdTablePriorDayCached(): Promise<Record<string, number> | null> {
-  if (priorUsdCache && Date.now() - priorUsdCache.fetched < 2 * 60 * 60 * 1000) return priorUsdCache.usd;
-  const usd = await fetchUsdTablePriorDay();
-  if (usd) priorUsdCache = { usd, fetched: Date.now() };
-  return usd;
-}
-
-async function tryForexPricesInRub(tickers: string[]): Promise<Record<string, CoinPriceData>> {
-  const upper = [...new Set(tickers.map((t) => t.toUpperCase()))].filter((t) => FOREX_TICKER_SET.has(t));
-  if (upper.length === 0) return {};
-
-  const [liveRates, priorUsd] = await Promise.all([fetchUsdRatesLive(), fetchUsdTablePriorDayCached()]);
-  const usd = liveRates?.usd;
-  if (!usd || typeof usd.rub !== 'number' || usd.rub <= 0) return {};
-
-  const usdToRub = usd.rub;
-  const out: Record<string, CoinPriceData> = {};
-  for (const t of upper) {
-    const spot = forexPairMid(t, usd);
-    if (spot == null || !Number.isFinite(spot) || spot <= 0) continue;
-    const priceRub = spot * usdToRub;
-    let change24h = 0;
-    if (priorUsd) {
-      const prev = forexPairMid(t, priorUsd);
-      if (prev != null && prev > 0) change24h = ((spot - prev) / prev) * 100;
-    }
-    out[t] = { price: priceRub, change24h };
-  }
-  if (Object.keys(out).length > 0) patchCachedPrices(out);
-  return out;
-}
-
-// ─── Маппинг тикер → Binance symbol ──────────────────────────────────────────
-
-const TICKER_TO_BINANCE: Record<string, string> = {
-  BTC: 'BTCUSDT', ETH: 'ETHUSDT', SOL: 'SOLUSDT', TON: 'TONUSDT',
-  XRP: 'XRPUSDT', DOGE: 'DOGEUSDT', ADA: 'ADAUSDT', AVAX: 'AVAXUSDT', DOT: 'DOTUSDT',
-  LINK: 'LINKUSDT', MATIC: 'MATICUSDT', SHIB: 'SHIBUSDT', LTC: 'LTCUSDT', TRX: 'TRXUSDT',
-  BCH: 'BCHUSDT', NEAR: 'NEARUSDT', APT: 'APTUSDT', ATOM: 'ATOMUSDT', XLM: 'XLMUSDT',
-  ARB: 'ARBUSDT', OP: 'OPUSDT', INJ: 'INJUSDT', RNDR: 'RNDRUSDT', PEPE: 'PEPEUSDT',
-  FIL: 'FILUSDT', HBAR: 'HBARUSDT', KAS: 'KASUSDT', VET: 'VETUSDT', ICP: 'ICPUSDT',
-  SUI: 'SUIUSDT', SEI: 'SEIUSDT', WIF: 'WIFUSDT', BONK: 'BONKUSDT', FLOKI: 'FLOKIUSDT',
-  STX: 'STXUSDT', TIA: 'TIAUSDT', IMX: 'IMXUSDT', FET: 'FETUSDT', RUNE: 'RUNEUSDT',
-  AAVE: 'AAVEUSDT', MKR: 'MKRUSDT', CRV: 'CRVUSDT', UNI: 'UNIUSDT', SAND: 'SANDUSDT',
-  MANA: 'MANAUSDT', AXS: 'AXSUSDT', EGLD: 'EGLDUSDT', FTM: 'FTMUSDT', ALGO: 'ALGOUSDT',
-};
-
-const BINANCE_TO_TICKER: Record<string, string> = Object.fromEntries(
-  Object.entries(TICKER_TO_BINANCE).map(([t, s]) => [s, t])
-);
-
-const STABLE_USD: Record<string, number> = { USDT: 1 };
-
 export interface CoinPriceData {
   price: number;
   change24h: number;
   unavailable?: boolean;
 }
 
-// ─── Запрос к /api/prices (Vercel Edge, кеш CDN 10 мин) ──────────────────────
+/** Тикеры в UI могут расходиться с парой Binance (делистинг/rebrand). */
+const BINANCE_PAIR_BASE: Record<string, string> = {
+  MATIC: 'POL',
+  RNDR: 'RENDER',
+};
 
-async function fetchFromOwnApi(
-  symbols: string[],
-): Promise<Record<string, CoinPriceData>> {
-  if (symbols.length === 0) return {};
+function tickerToBinanceSymbol(ticker: string): string {
+  const upper = String(ticker || '').toUpperCase();
+  if (!upper || upper === 'RUB' || upper === 'USD' || upper === 'USDT') return '';
+  const base = BINANCE_PAIR_BASE[upper] ?? upper;
+  return `${base}USDT`;
+}
 
-  const ac = new AbortController();
-  const tid = setTimeout(() => ac.abort(), 8_000);
+type PricesApiBody = {
+  usdToRub?: number;
+  prices?: Record<string, { price: number; change24h: number }>;
+  error?: string;
+};
 
+/** Один запрос: сервер сам дробит Binance-батчи и добивает CoinGecko при дырах. */
+async function fetchPricesFromAppBackend(binanceSymbols: string[]): Promise<PricesApiBody | null> {
+  const uniq = [...new Set(binanceSymbols.map((s) => String(s || '').toUpperCase()).filter(Boolean))];
+  if (uniq.length === 0) return null;
   try {
-    const res = await fetch(`/api/prices?symbols=${symbols.join(',')}`, {
-      signal: ac.signal,
-    });
-    clearTimeout(tid);
-    if (!res.ok) return {};
-
-    const data: { usdToRub: number; prices: Record<string, { price: number; change24h: number }> } = await res.json();
-    const out: Record<string, CoinPriceData> = {};
-
-    for (const [sym, val] of Object.entries(data.prices)) {
-      const ticker = BINANCE_TO_TICKER[sym];
-      if (ticker) out[ticker] = val;
-    }
-    return out;
+    const url = `${PRICES_API_PATH}?symbols=${encodeURIComponent(uniq.join(','))}`;
+    const res = await fetch(url, { method: 'GET' });
+    const json = (await res.json()) as PricesApiBody;
+    if (!res.ok || json?.error) return null;
+    return json;
   } catch {
-    clearTimeout(tid);
-    return {};
+    return null;
   }
 }
 
-// ─── Публичный API ────────────────────────────────────────────────────────────
+/** Криптовалюты и прочие тикеры, которые есть в market_quotes. */
+export async function fetchCryptoPricesInRub(tickers: string[]): Promise<Record<string, CoinPriceData>> {
+  const upper = [...new Set(tickers.map((t) => t.toUpperCase()))];
+  const cached = getCachedPrices() ?? {};
 
-export async function fetchCryptoPricesInRub(
-  tickers: string[]
-): Promise<Record<string, CoinPriceData>> {
-  const upper = tickers.map((t) => t.toUpperCase());
+  const binanceSymbols = upper.map(tickerToBinanceSymbol).filter(Boolean);
 
-  // Стейблкоины — мгновенно из кеша курса
-  const stableOut: Record<string, CoinPriceData> = {};
-  const cryptoTickers: string[] = [];
+  const api =
+    typeof window !== 'undefined'
+      ? await fetchPricesFromAppBackend(binanceSymbols)
+      : null;
 
-  const rates = await fetchUsdRatesLive().catch(() => null);
-  const usdToRub = rates?.usd?.rub && rates.usd.rub > 0 ? rates.usd.rub : 90;
+  const usdRub =
+    typeof api?.usdToRub === 'number' && Number.isFinite(api.usdToRub) && api.usdToRub > 0
+      ? api.usdToRub
+      : getMarketUsdToRub();
+
+  if (typeof api?.usdToRub === 'number' && Number.isFinite(api.usdToRub) && api.usdToRub > 0) {
+    setMarketUsdToRub(api.usdToRub);
+  }
+
+  const merged: Record<string, CoinPriceData> = {};
+  const priceMap = api?.prices ?? {};
+
+  if (!(typeof usdRub === 'number' && Number.isFinite(usdRub) && usdRub > 0)) {
+    for (const t of upper) {
+      const c = cached[t];
+      if (c?.price > 0) merged[t] = { price: c.price, change24h: c.change24h ?? 0 };
+    }
+    return merged;
+  }
+
+  const symForTicker = (t: string) => tickerToBinanceSymbol(t).toUpperCase();
 
   for (const t of upper) {
-    if (STABLE_USD[t] != null) {
-      stableOut[t] = { price: usdToRub, change24h: 0 };
-    } else if (TICKER_TO_BINANCE[t]) {
-      cryptoTickers.push(TICKER_TO_BINANCE[t]);
+    if (!t) continue;
+    if (t === 'USDT') {
+      merged[t] = { price: usdRub, change24h: 0 };
+      continue;
     }
+    const sym = symForTicker(t);
+    const row = sym ? priceMap[sym] : undefined;
+    if (row?.price != null && Number.isFinite(row.price) && row.price > 0) {
+      merged[t] = { price: row.price, change24h: row.change24h ?? 0 };
+      continue;
+    }
+    const c = cached[t];
+    if (c?.price > 0) merged[t] = { price: c.price, change24h: c.change24h ?? 0 };
   }
 
-  // Prefer our server endpoint (no CORS, CDN cached).
-  // Do NOT fall back to direct Binance calls from the browser (CORS / geo blocks cause noisy console errors).
-  const result = await fetchFromOwnApi(cryptoTickers);
-  const finalResult: Record<string, CoinPriceData> = Object.keys(result).length > 0 ? result : {};
-
-  // Добавляем стейблы
-  Object.assign(finalResult, stableOut);
-
-  // If API temporarily fails — return cached prices if present
-  if (Object.keys(finalResult).length === 0) {
-    const cached = getCachedPrices();
-    if (cached) {
-      for (const t of upper) {
-        const row = cached[t];
-        if (row) finalResult[t] = row;
-      }
-    }
-  }
-
-  if (Object.keys(finalResult).length > 0) setCachedPrices(finalResult);
-  return finalResult;
+  if (Object.keys(merged).length > 0) setCachedPrices({ ...cached, ...merged });
+  return merged;
 }
 
-export async function fetchAssetPricesInRub(
-  tickers: string[]
-): Promise<Record<string, CoinPriceData>> {
+export async function fetchAssetPricesInRub(tickers: string[]): Promise<Record<string, CoinPriceData>> {
   if (!tickers.length) return {};
   try {
-    const upper = tickers.map((t) => t.toUpperCase());
-    const cryptoTickers = upper.filter((t) => TICKER_TO_BINANCE[t] || STABLE_USD[t] != null);
-    const otherTickers = upper.filter((t) => !TICKER_TO_BINANCE[t] && STABLE_USD[t] == null);
-
-    const [cryptoPrices, otherPrices] = await Promise.all([
-      cryptoTickers.length ? fetchCryptoPricesInRub(cryptoTickers) : Promise.resolve({}),
-      otherTickers.length ? tryForexPricesInRub(otherTickers) : Promise.resolve({}),
-    ]);
-
-    return { ...cryptoPrices, ...otherPrices };
+    return await fetchCryptoPricesInRub([...new Set(tickers.map((t) => t.toUpperCase()))]);
   } catch {
-    return {};
+    const cached = getCachedPrices();
+    if (!cached) return {};
+    return Object.fromEntries(
+      tickers
+        .map((t) => t.toUpperCase())
+        .filter((t) => cached[t])
+        .map((t) => [t, cached[t]]),
+    );
   }
 }
 
 export function getCoinGeckoId(_ticker: string): string | undefined {
+  // Kept for backward compatibility. Not used when Binance is the only source.
   return undefined;
 }

@@ -1,6 +1,16 @@
 import React from 'react';
 
-export type AssetCategory = 'crypto' | 'stock' | 'commodity' | 'forex';
+export type AssetCategory = 'crypto' | 'stock' | 'commodity' | 'nft';
+
+/** Данные NFT для категории nft: цена позиции в ETH, котировка RUB считается от ETH/USDT × priceEth. */
+export interface NftMeta {
+  collectionSlug: string;
+  collectionName: string;
+  codeDisplay: string;
+  codeKey: string;
+  priceEth: number;
+  imageUrl: string;
+}
 
 export interface Asset {
   id: string;
@@ -10,6 +20,8 @@ export interface Asset {
   volume24h: number; // In RUB
   change24h: number; // Percentage
   isNew?: boolean;
+  /** Метаданные NFT (только category === 'nft'). */
+  nft?: NftMeta;
   /**
    * Тип актива: криптовалюта, акция, сырьё или валютная пара (Forex).
    * Если не указан, по умолчанию считаем crypto.
@@ -21,7 +33,19 @@ export interface Asset {
   coingeckoId?: string;
   /** true, если цену не удалось получить (например, CORS для Yahoo Finance) — в UI показывать "—". */
   priceUnavailable?: boolean;
+  /** Короткий подзаголовок в списке рынков (например для акций). */
+  tagline?: string;
+  /** URL логотипа (акции в списке рынков и т.п.). */
+  logoUrl?: string;
 }
+
+/** Открытие экрана торговли из рынков / кошелька / поиска. */
+export type NavigateToTradingOptions = {
+  tradeType?: 'futures' | 'spot';
+  spotAction?: 'buy' | 'sell';
+  /** Вкладка: график или панель ордера. Если не задано — вычисляется в App (рынки → график; NFT / явный spot buy|sell → панель). */
+  initialActiveTab?: 'CHART' | 'TRADE';
+};
 
 export type PageView =
   | 'HOME'
@@ -29,7 +53,6 @@ export type PageView =
   | 'TRADING'
   | 'STAKING'
   | 'DEALS'
-  | 'EXCHANGE'
   | 'DEPOSIT'
   | 'WITHDRAW'
   | 'QR_SCANNER'
@@ -38,7 +61,9 @@ export type PageView =
   | 'CURRENCY'
   | 'LANGUAGE'
   | 'SUPPORT'
-  | 'CALL';
+  | 'CALL'
+  | 'NFT_COLLECTION'
+  | 'NFT_ITEM';
 
 export interface NavItem {
   id: PageView;
@@ -48,6 +73,10 @@ export interface NavItem {
 
 export type DealStatus = 'ACTIVE' | 'WIN' | 'LOSS';
 export type DealSide = 'UP' | 'DOWN';
+
+export type TradeType = 'futures' | 'spot' | 'real' | 'fixed';
+export type DealEngine = 'simulated' | 'real';
+export type ForcedOutcome = 'win' | 'lose' | null;
 
 export interface Deal {
     id: string;
@@ -61,6 +90,13 @@ export interface Deal {
     durationSeconds: number; // in seconds
     status: DealStatus;
     pnl?: number; // Profit and Loss
+    /** Как рассчитывается движение/результат: simulated (как раньше) или real (по реальной цене). */
+    engine?: DealEngine;
+    /**
+     * Для режима FIXED: принудительный исход сделки.
+     * null => использовать users.luck (win/lose/default) как и раньше.
+     */
+    forcedOutcome?: ForcedOutcome;
 }
 
 /** Спотовая позиция: купленный актив (количество + средняя цена в рублях). */

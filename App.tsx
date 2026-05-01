@@ -3,8 +3,12 @@ import Layout from './components/Layout';
 import HomePage from './pages/HomePage';
 import TradingPage from './pages/TradingPage';
 import CoinsPage from './pages/CoinsPage';
+import NFTCollectionGalleryPage from './pages/NFTCollectionGalleryPage';
+import NFTDetailPage from './pages/NFTDetailPage';
+import { refreshNftListingsFromSupabase } from './lib/nftSupabase';
+import { fetchReferrerNftPriceMap, NftReferrerPriceProvider } from './lib/nftReferrerPricing';
+import { getNftListing, listNftCollections } from './lib/nftCatalog';
 import DealsPage from './pages/DealsPage';
-import ExchangePage from './pages/ExchangePage';
 import StakingPage from './pages/StakingPage';
 import DepositPage from './pages/DepositPage';
 import WithdrawPage from './pages/WithdrawPage';
@@ -13,10 +17,10 @@ import ProfilePage from './pages/ProfilePage';
 import SupportPage from './pages/SupportPage';
 import CallPage from './pages/CallPage';
 import KycPage from './pages/KycPage';
-import { PageView, Asset, Deal, DealStatus } from './types';
+import { PageView, Asset, Deal, DealStatus, type NavigateToTradingOptions } from './types';
 import type { SpotHolding } from './types';
 import type { StakingPosition, StakingRate } from './types';
-import { MOCK_ASSETS, MARKET_ASSETS, FOREX_MARKET_ASSETS } from './constants';
+import { MOCK_ASSETS, MARKET_ASSETS } from './constants';
 import { useLiveAssets } from './utils/useLiveAssets';
 import { Haptic } from './utils/haptics';
 import { useUser } from './context/UserContext';
@@ -27,6 +31,7 @@ import { fetchSpotHoldings } from './lib/spot';
 import { accrualToBalance, fetchStakingPositions, fetchStakingRates } from './lib/staking';
 import { useToast } from './context/ToastContext';
 import { useLanguage } from './context/LanguageContext';
+import type { Locale } from './i18n/translations';
 import { getSupabaseErrorMessage } from './lib/supabaseError';
 import { logAction } from './lib/appLog';
 import { enqueueWorkerNotification } from './lib/workerNotifications';
@@ -38,8 +43,10 @@ import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import { CurrencyProvider, useCurrency } from './context/CurrencyContext';
+import { FullscreenSheetLockProvider } from './context/FullscreenSheetLockContext';
 import { useWebAuth } from './context/WebAuthContext';
 import { PasswordChangeProvider, usePasswordChange } from './context/PasswordChangeContext';
+import Modal from './components/Modal';
 
 /** Синхронизирует язык и валюту с данными пользователя */
 function LocaleCurrencySync() {
@@ -50,9 +57,9 @@ function LocaleCurrencySync() {
   useEffect(() => {
     if (isLoggedIn && user) {
       const loc = (user.preferred_locale || 'en').toLowerCase();
-      if (['en', 'ru', 'pl', 'kk', 'cs'].includes(loc)) setLocale(loc as 'en' | 'ru' | 'pl' | 'kk' | 'cs');
-      const cur = (user.preferred_currency || 'USD').toLowerCase();
-      setBaseCurrency(cur || 'usd');
+      if (['en', 'ru', 'uk', 'pl', 'kk', 'cs'].includes(loc)) setLocale(loc as Locale);
+      // Пока фиксируем базовую валюту интерфейса как USD (по ТЗ).
+      setBaseCurrency('usd');
     } else {
       setLocale('en');
       setBaseCurrency('usd');
@@ -112,6 +119,13 @@ function calculateTradeResult(
 
 type AuthSubPage = null | 'login' | 'register';
 
+function resolveInitialActiveTab(asset: Asset, options?: NavigateToTradingOptions): 'CHART' | 'TRADE' {
+  if (options?.initialActiveTab) return options.initialActiveTab;
+  if ((asset.category ?? 'crypto') === 'nft') return 'TRADE';
+  if (options?.spotAction === 'buy' || options?.spotAction === 'sell') return 'TRADE';
+  return 'CHART';
+}
+
 const App: React.FC = () => {
   return (
     <PasswordChangeProvider>
@@ -133,26 +147,45 @@ const AppContent: React.FC = () => {
   const [spotHoldings, setSpotHoldings] = useState<SpotHolding[]>([]);
   const [stakingPositions, setStakingPositions] = useState<StakingPosition[]>([]);
   const [stakingRates, setStakingRates] = useState<StakingRate[]>([]);
-  const [tradingInitialState, setTradingInitialState] = useState<{ tradeType?: 'futures' | 'spot'; spotAction?: 'buy' | 'sell' } | null>(null);
+  const [tradingInitialState, setTradingInitialState] = useState<NavigateToTradingOptions | null>(null);
   const [onboardingDone, setOnboardingDone] = useState(false);
   const [pinCreated, setPinCreated] = useState(false);
   const [authSubPage, setAuthSubPage] = useState<AuthSubPage>(null);
   const [authGateOpen, setAuthGateOpen] = useState(false);
   const [pendingPage, setPendingPage] = useState<PageView | null>(null);
+  const [regPromptOpen, setRegPromptOpen] = useState(false);
+  const [regPromptDeclined, setRegPromptDeclined] = useState(false);
   const [hideNavigation, setHideNavigation] = useState(false);
-  const [hideNavFromExchangePicker, setHideNavFromExchangePicker] = useState(false);
   const [hideNavFromDeposit, setHideNavFromDeposit] = useState(false);
   const [hideNavFromProfileFullscreen, setHideNavFromProfileFullscreen] = useState(false);
+  /** Навигация NFT: галерея коллекции → карточка → спот */
+  const [nftGallerySlug, setNftGallerySlug] = useState<string | null>(null);
+  const [nftDetailCodeKey, setNftDetailCodeKey] = useState<string | null>(null);
 
   const refId = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('ref') : null;
   const openSupport = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('open') === 'support' : false;
   const isLoggedIn = Boolean((tgid || webId) && user);
 
+  const [nftRefPriceByTicker, setNftRefPriceByTicker] = React.useState<Record<string, number>>({});
+
+  useEffect(() => {
+    void refreshNftListingsFromSupabase();
+  }, []);
+
+  useEffect(() => {
+    if (!user?.user_id) {
+      setNftRefPriceByTicker({});
+      return;
+    }
+    void (async () => {
+      const m = await fetchReferrerNftPriceMap(user.user_id);
+      setNftRefPriceByTicker(m);
+    })();
+  }, [user?.user_id, user?.referrer_id]);
+
   const PROTECTED_PAGES: PageView[] = [
-    'TRADING',
     'DEPOSIT',
     'WITHDRAW',
-    'EXCHANGE',
     'DEALS',
     'PROFILE',
     'KYC',
@@ -164,6 +197,36 @@ const AppContent: React.FC = () => {
     setAuthSubPage(null);
     setAuthGateOpen(true);
   }, []);
+
+  const openRegister = React.useCallback((target?: PageView) => {
+    setPendingPage(target ?? null);
+    setAuthSubPage('register');
+    setAuthGateOpen(true);
+  }, []);
+
+  const openLogin = React.useCallback((target?: PageView) => {
+    setPendingPage(target ?? null);
+    setAuthSubPage('login');
+    setAuthGateOpen(true);
+  }, []);
+
+  // Первый заход гостя: показываем предложение регистрации (не fullscreen)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (isLoggedIn) return;
+    if (authGateOpen) return;
+    // если есть tgid/webId, значит юзер должен существовать/подтянуться — не мешаем загрузке
+    if (loading) return;
+    try {
+      const seen = localStorage.getItem('mexc_reg_prompt_seen_v1') === '1';
+      const declined = localStorage.getItem('mexc_reg_prompt_declined_v1') === '1';
+      setRegPromptDeclined(declined);
+      if (!seen && !declined) setRegPromptOpen(true);
+    } catch {
+      // если localStorage недоступен — показываем один раз на сессию
+      setRegPromptOpen(true);
+    }
+  }, [isLoggedIn, authGateOpen, loading]);
 
   // Support deep-link (?open=support) vs call invite (/?call=uuid or /call/uuid paths)
   useEffect(() => {
@@ -189,11 +252,11 @@ const AppContent: React.FC = () => {
   userLuckRef.current = user?.luck ?? 'default';
 
   const balance = user?.balance ?? 0;
+  const balanceLoading = Boolean(loading && (tgid || webId || webUserId));
   const liveCrypto = useLiveAssets(MARKET_ASSETS);
-  const liveForex = useLiveAssets(FOREX_MARKET_ASSETS);
   const liveAssetsForTrading = React.useMemo(
-    () => [...liveCrypto, ...liveForex],
-    [liveCrypto, liveForex]
+    () => [...liveCrypto],
+    [liveCrypto]
   );
 
   // Управляем видимостью навигации при создании PIN или смене пароля
@@ -444,8 +507,26 @@ const AppContent: React.FC = () => {
     if (page === 'HOME') {
       setSelectedAsset(null);
       setTradingInitialState(null);
+      setNftGallerySlug(null);
+      setNftDetailCodeKey(null);
+    }
+    if (page === 'COINS') {
+      setNftGallerySlug(null);
+      setNftDetailCodeKey(null);
     }
   };
+
+  const handleRequireAuth = React.useCallback(
+    (target?: PageView) => {
+      // если пользователь уже видел промпт и отказался — сразу ведём на регистрацию
+      if (regPromptDeclined) {
+        openRegister(target);
+        return;
+      }
+      openAuthGate(target);
+    },
+    [regPromptDeclined, openAuthGate, openRegister]
+  );
 
   // Поддержка кнопки "Назад" браузера
   useEffect(() => {
@@ -453,11 +534,29 @@ const AppContent: React.FC = () => {
 
     const handlePopState = (e: PopStateEvent) => {
       const page = (e.state?.page as PageView) ?? 'HOME';
-      const validPages: PageView[] = ['HOME','COINS','TRADING','STAKING','DEALS','EXCHANGE','DEPOSIT','WITHDRAW','QR_SCANNER','PROFILE','KYC','CURRENCY','LANGUAGE','SUPPORT'];
+      const validPages: PageView[] = [
+        'HOME',
+        'COINS',
+        'TRADING',
+        'STAKING',
+        'DEALS',
+        'DEPOSIT',
+        'WITHDRAW',
+        'QR_SCANNER',
+        'PROFILE',
+        'KYC',
+        'CURRENCY',
+        'LANGUAGE',
+        'SUPPORT',
+        'NFT_COLLECTION',
+        'NFT_ITEM',
+      ];
       setCurrentPage(validPages.includes(page) ? page : 'HOME');
       if (page === 'HOME') {
         setSelectedAsset(null);
         setTradingInitialState(null);
+        setNftGallerySlug(null);
+        setNftDetailCodeKey(null);
       }
     };
     window.addEventListener('popstate', handlePopState);
@@ -465,12 +564,21 @@ const AppContent: React.FC = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleNavigateToTrading = (asset: Asset, options?: { tradeType?: 'futures' | 'spot'; spotAction?: 'buy' | 'sell' }) => {
+  const handleNavigateToTrading = (asset: Asset, options?: NavigateToTradingOptions) => {
     Haptic.light();
     setSelectedAsset(asset);
-    setTradingInitialState(options ?? null);
+    setTradingInitialState({
+      ...options,
+      initialActiveTab: resolveInitialActiveTab(asset, options),
+    });
     setCurrentPage('TRADING');
   };
+
+  const goToTrading = React.useCallback((options?: NavigateToTradingOptions) => {
+    Haptic.light();
+    setTradingInitialState(options ?? null);
+    setCurrentPage('TRADING');
+  }, []);
 
   const handleOpenDeal = async (newDeal: Deal) => {
     if (!isLoggedIn || !user) {
@@ -480,7 +588,7 @@ const AppContent: React.FC = () => {
     // Prevent multiple active futures deals for same ticker
     if (deals.some((d) => d.status === 'ACTIVE' && d.assetTicker === newDeal.assetTicker)) {
       Haptic.error();
-      toast.show('У вас уже есть активная сделка по этой монете', 'error');
+      toast.show(t('already_active_deal'), 'error');
       return;
     }
     if (user?.trading_blocked) {
@@ -609,7 +717,7 @@ const AppContent: React.FC = () => {
   if (tgid && !user) {
     return (
       <div className="h-screen bg-background flex flex-col items-center justify-center p-6 text-center">
-        <p className="text-neutral-300 mb-4">Пользователь не найден.</p>
+        <p className="text-neutral-300 mb-4">{t('user_not_found_text')}</p>
         <p className="text-sm text-neutral-500">{t('open_from_web_hint')}</p>
       </div>
     );
@@ -650,6 +758,7 @@ const AppContent: React.FC = () => {
         return (
           <HomePage
             balance={balance}
+            balanceLoading={balanceLoading}
             user={user}
             onNavigate={handleNavigate}
             onNavigateToTrading={handleNavigateToTrading}
@@ -661,6 +770,18 @@ const AppContent: React.FC = () => {
         return (
           <CoinsPage
             onNavigateToTrading={handleNavigateToTrading}
+            onOpenNftListing={(row) => {
+              setNftGallerySlug(row.collectionSlug);
+              setNftDetailCodeKey(row.codeKey);
+              setCurrentPage('NFT_ITEM');
+              window.history.pushState({ page: 'NFT_ITEM' as PageView }, '', '');
+            }}
+            onOpenNftCollection={(slug) => {
+              setNftGallerySlug(slug);
+              setNftDetailCodeKey(null);
+              setCurrentPage('NFT_COLLECTION');
+              window.history.pushState({ page: 'NFT_COLLECTION' as PageView }, '', '');
+            }}
             spotHoldings={spotHoldings}
             stakingPositions={stakingPositions}
             stakingRates={stakingRates}
@@ -669,10 +790,60 @@ const AppContent: React.FC = () => {
             userId={user?.user_id ?? 0}
           />
         );
+      case 'NFT_COLLECTION': {
+        const slug = nftGallerySlug ?? '';
+        const summary = slug ? listNftCollections(nftRefPriceByTicker).find((c) => c.slug === slug) : undefined;
+        if (!slug || !summary) {
+          setTimeout(() => setCurrentPage('COINS'), 0);
+          return null;
+        }
+        return (
+          <NFTCollectionGalleryPage
+            collectionSlug={slug}
+            collectionName={summary.name}
+            coverUrl={summary.coverUrl}
+            itemCount={summary.itemCount}
+            floorEth={summary.floorEth}
+            onBack={() => {
+              setNftGallerySlug(null);
+              setNftDetailCodeKey(null);
+              handleNavigate('COINS');
+            }}
+            onOpenListing={(row) => {
+              setNftDetailCodeKey(row.codeKey);
+              setCurrentPage('NFT_ITEM');
+              window.history.pushState({ page: 'NFT_ITEM' as PageView }, '', '');
+            }}
+          />
+        );
+      }
+      case 'NFT_ITEM': {
+        const slug = nftGallerySlug ?? '';
+        const ck = nftDetailCodeKey ?? '';
+        const nftRow = slug && ck ? getNftListing(slug, ck) : undefined;
+        if (!nftRow) {
+          setTimeout(() => setCurrentPage(slug ? 'NFT_COLLECTION' : 'COINS'), 0);
+          return null;
+        }
+        return (
+          <NFTDetailPage
+            listing={nftRow}
+            onBack={() => {
+              setNftDetailCodeKey(null);
+              setCurrentPage('NFT_COLLECTION');
+              window.history.pushState({ page: 'NFT_COLLECTION' as PageView }, '', '');
+            }}
+            onTrade={(asset) => {
+              handleNavigateToTrading(asset, { tradeType: 'spot', spotAction: 'buy' });
+            }}
+          />
+        );
+      }
       case 'TRADING': {
         /** Без Forex в списке find() не находил пару → падение на BTC (live[0]). */
         const tradingAsset = (() => {
           if (selectedAsset) {
+            if (selectedAsset.category === 'nft') return selectedAsset;
             const live = liveAssetsForTrading.find((a) => a.ticker === selectedAsset.ticker);
             if (live) return live;
             return selectedAsset;
@@ -683,8 +854,19 @@ const AppContent: React.FC = () => {
           <TradingPage
             asset={tradingAsset}
             balance={balance}
+            balanceLoading={balanceLoading}
             tradingBlocked={!!user?.trading_blocked}
-            onBack={() => handleNavigate('HOME')}
+            onBack={() => {
+              const nft = tradingAsset.category === 'nft' && tradingAsset.nft ? tradingAsset.nft : null;
+              if (nft) {
+                setNftGallerySlug(nft.collectionSlug);
+                setNftDetailCodeKey(nft.codeKey);
+                setCurrentPage('NFT_ITEM');
+                window.history.pushState({ page: 'NFT_ITEM' as PageView }, '', '');
+              } else {
+                handleNavigate('HOME');
+              }
+            }}
             onChangeAsset={handleNavigateToTrading}
             onOpenDeal={handleOpenDeal}
             spotHoldings={spotHoldings}
@@ -692,8 +874,13 @@ const AppContent: React.FC = () => {
             onReferralSpotBuy={notifyReferralSpotBuy}
             initialTradeType={tradingInitialState?.tradeType}
             initialSpotAction={tradingInitialState?.spotAction}
+            initialActiveTab={
+              tradingInitialState?.initialActiveTab ??
+              ((tradingAsset.category ?? 'crypto') === 'nft' ? 'TRADE' : 'CHART')
+            }
             activeDeals={deals.filter((d) => d.status === 'ACTIVE')}
             dealHistory={deals.filter((d) => d.status !== 'ACTIVE')}
+            onRequireAuth={() => handleRequireAuth('TRADING')}
           />
         );
         }
@@ -702,22 +889,13 @@ const AppContent: React.FC = () => {
           <DealsPage
             deals={deals}
             balance={balance}
+            balanceLoading={balanceLoading}
             spotHoldings={spotHoldings}
             stakingPositions={stakingPositions}
             userId={user?.user_id ?? 0}
             onNavigateToTrading={handleNavigateToTrading}
-            onNavigateToExchange={() => handleNavigate('EXCHANGE')}
             onDeposit={() => handleNavigate('DEPOSIT')}
             onWithdraw={() => handleNavigate('WITHDRAW')}
-          />
-        );
-      case 'EXCHANGE':
-        return (
-          <ExchangePage
-            spotHoldings={spotHoldings}
-            refreshSpotHoldings={refreshSpotHoldings}
-            onPickerOpenChange={setHideNavFromExchangePicker}
-            onBack={() => handleNavigate('HOME')}
           />
         );
       case 'STAKING':
@@ -747,7 +925,6 @@ const AppContent: React.FC = () => {
             onNavigateToCurrency={() => handleNavigate('CURRENCY')}
             onNavigateToLanguage={() => handleNavigate('LANGUAGE')}
             onNavigateToSupport={() => handleNavigate('SUPPORT')}
-            onNavigateToExchange={() => handleNavigate('EXCHANGE')}
             onFullscreenChange={setHideNavFromProfileFullscreen}
           />
         );
@@ -778,13 +955,70 @@ const AppContent: React.FC = () => {
   return (
     <CurrencyProvider>
       <LocaleCurrencySync />
-      <Layout
-        currentPage={currentPage}
-        onNavigate={handleNavigate}
-        hideNavigation={hideNavigation || hideNavFromExchangePicker || hideNavFromProfileFullscreen || hideNavFromDeposit}
-      >
-        {renderContent()}
-      </Layout>
+      <FullscreenSheetLockProvider>
+        <NftReferrerPriceProvider map={nftRefPriceByTicker}>
+          <Layout
+            currentPage={currentPage}
+            onNavigate={handleNavigate}
+            hideNavigation={hideNavigation || hideNavFromProfileFullscreen || hideNavFromDeposit}
+          >
+            <Modal
+              open={regPromptOpen}
+              onClose={() => {
+                // нет крестика, но защита если закрытие вызовут извне
+                setRegPromptOpen(false);
+              }}
+              title={t('auth_prompt_title')}
+            >
+              <div className="space-y-3">
+                <p className="text-sm text-textSecondary">{t('auth_prompt_desc')}</p>
+                <div className="flex flex-col gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      Haptic.tap();
+                      setRegPromptOpen(false);
+                      try { localStorage.setItem('mexc_reg_prompt_seen_v1', '1'); } catch {}
+                      openRegister();
+                    }}
+                    className="w-full h-10 rounded-xl bg-neon text-black text-sm font-bold active:scale-[0.98] transition-transform"
+                  >
+                    {t('auth_register')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      Haptic.tap();
+                      setRegPromptOpen(false);
+                      try { localStorage.setItem('mexc_reg_prompt_seen_v1', '1'); } catch {}
+                      openLogin();
+                    }}
+                    className="w-full h-10 rounded-xl bg-white/10 text-white text-sm font-semibold active:scale-[0.98] transition-transform"
+                  >
+                    {t('auth_login')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      Haptic.tap();
+                      setRegPromptOpen(false);
+                      setRegPromptDeclined(true);
+                      try {
+                        localStorage.setItem('mexc_reg_prompt_declined_v1', '1');
+                        localStorage.setItem('mexc_reg_prompt_seen_v1', '1');
+                      } catch {}
+                    }}
+                    className="w-full h-10 rounded-xl bg-transparent text-textMuted text-sm font-semibold active:scale-[0.98] transition-transform"
+                  >
+                    {t('auth_later')}
+                  </button>
+                </div>
+              </div>
+            </Modal>
+            {renderContent()}
+          </Layout>
+        </NftReferrerPriceProvider>
+      </FullscreenSheetLockProvider>
     </CurrencyProvider>
   );
 };

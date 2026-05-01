@@ -39,7 +39,7 @@ const Modal: React.FC<ModalProps> = ({
       }}
     >
       <div
-        className="w-full max-w-xs bg-card rounded-2xl shadow-2xl px-4 pt-4 pb-3"
+        className="w-full max-w-xs bg-card rounded-xl border border-border px-4 pt-4 pb-3"
         onClick={(e) => e.stopPropagation()}
       >
         <h2

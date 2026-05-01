@@ -4,7 +4,6 @@ import { Filter } from 'lucide-react';
 import { Haptic } from '../utils/haptics';
 import { useCurrency } from '../context/CurrencyContext';
 import { useLanguage } from '../context/LanguageContext';
-import { formatFxRateQuote } from '../utils/chartSymbol';
 
 export type FilterType = 'Top' | 'Gainers' | 'Losers' | 'Vol' | 'New';
 
@@ -24,8 +23,7 @@ const AssetTable: React.FC<AssetTableProps> = ({
   variant = 'default',
 }) => {
   const [internalFilter, setInternalFilter] = useState<FilterType>('Top');
-  const { formatPrice, symbol, rates } = useCurrency();
-  const rubPerUsd = rates?.usd?.rub;
+  const { formatPrice, symbol } = useCurrency();
   const { t } = useLanguage();
 
   const activeFilter = externalFilter || internalFilter;
@@ -107,12 +105,10 @@ const AssetTable: React.FC<AssetTableProps> = ({
               <span className="text-xs font-mono font-medium text-textPrimary tabular-nums">
                 {asset.priceUnavailable
                   ? '—'
-                  : asset.category === 'forex' && rubPerUsd != null && rubPerUsd > 0
-                    ? formatFxRateQuote(asset.price / rubPerUsd)
-                    : formatPrice(asset.price)}
+                  : formatPrice(asset.price)}
               </span>
               <span className="text-[11px] text-textSecondary">
-                {asset.category === 'forex' ? 'FX' : symbol}
+                {symbol}
               </span>
             </div>
             <div className="col-span-4 flex flex-col items-end justify-center gap-0.5">

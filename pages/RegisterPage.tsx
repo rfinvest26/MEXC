@@ -88,19 +88,19 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ refId, onBack, onSuccess, o
     setEmailError(null);
     setPassError(null);
     setPass2Error(null);
-    if (!trimmed) setEmailError('Введите email');
-    else if (!isValidEmail(trimmed)) setEmailError('Email выглядит неверно (пример: name@gmail.com)');
+    if (!trimmed) setEmailError(t('auth_enter_email'));
+    else if (!isValidEmail(trimmed)) setEmailError(t('auth_email_invalid'));
     const pv = validatePassword(password);
-    if (!password) setPassError('Введите пароль');
-    else if (!pv.len) setPassError('Пароль должен быть не короче 8 символов');
-    if (!confirmPassword) setPass2Error('Повторите пароль');
-    else if (password !== confirmPassword) setPass2Error('Пароли не совпадают');
+    if (!password) setPassError(t('auth_enter_password'));
+    else if (!pv.len) setPassError(t('auth_password_min8'));
+    if (!confirmPassword) setPass2Error(t('auth_repeat_password'));
+    else if (password !== confirmPassword) setPass2Error(t('auth_passwords_mismatch'));
     if (!trimmed || !isValidEmail(trimmed) || !pv.len || password !== confirmPassword) {
-      toast.show('Проверьте поля ввода', 'error');
+      toast.show(t('auth_check_fields'), 'error');
       return;
     }
     if (!agreeTos || !agreePrivacy) {
-      toast.show('Примите условия Terms и Privacy', 'error');
+      toast.show(t('auth_accept_terms_privacy'), 'error');
       return;
     }
 
@@ -113,18 +113,18 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ refId, onBack, onSuccess, o
         if (requiresEmailConfirmation) {
           setStep('confirm_email');
           setShowConfirmModal(true);
-          toast.show('Мы отправили письмо для подтверждения email. Проверьте почту.', 'success');
+          toast.show(t('auth_email_sent_confirm'), 'success');
           return;
         }
-        toast.show('Аккаунт создан', 'success');
+        toast.show(t('auth_account_created'), 'success');
         onSuccess();
       } else {
         const isRateLimit = error?.toLowerCase().includes('слишком много') || error?.toLowerCase().includes('rate limit');
         if (isRateLimit) startCooldown(90);
-        toast.show(error || 'Ошибка регистрации', 'error');
+        toast.show(error || t('auth_error_register'), 'error');
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Ошибка регистрации';
+      const msg = err instanceof Error ? err.message : t('auth_error_register');
       toast.show(msg, 'error');
     } finally {
       setLoading(false);
@@ -133,7 +133,7 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ refId, onBack, onSuccess, o
 
   return (
     <>
-      <AuthFullScreenLayout onBack={onBack} title="Регистрация" subtitle="Укажите email и пароль">
+      <AuthFullScreenLayout onBack={onBack} title={t('auth_register_title')} subtitle={t('auth_register_subtitle')}>
         {step === 'form' ? (
           <form onSubmit={handleSubmit} className="space-y-5 pt-2">
           <div>
@@ -255,20 +255,20 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ refId, onBack, onSuccess, o
             className="w-full py-4 rounded-2xl bg-neon text-black font-bold text-base shadow-lg shadow-neon/20 hover:bg-neon/90 disabled:opacity-60 active:scale-[0.99] transition-all flex items-center justify-center gap-2"
           >
             {loading ? <Loader2 className="animate-spin" size={22} /> : null}
-            {rateLimitCooldown > 0 ? `Подождите ${rateLimitCooldown}с…` : t('create_account')}
+            {rateLimitCooldown > 0 ? t('auth_wait_seconds', { s: rateLimitCooldown }) : t('create_account')}
           </button>
 
           <p className="text-center text-sm text-textMuted pt-2">
-            Уже есть аккаунт?{' '}
+            {t('auth_have_account')}{' '}
             <button type="button" className="text-neon font-semibold hover:underline" onClick={onGoLogin}>
-              Войти
+              {t('login_btn')}
             </button>
           </p>
           </form>
         ) : (
           <div className="space-y-4 pt-2">
             <div className="rounded-2xl border border-border bg-surface p-4">
-              <h2 className="text-lg font-bold text-textPrimary">Подтвердите email</h2>
+              <h2 className="text-lg font-bold text-textPrimary">{t('auth_confirm_email_title')}</h2>
               <p className="text-sm text-textSecondary mt-2 leading-relaxed">
                 Мы отправили письмо на <span className="font-mono text-white">{email.trim().toLowerCase()}</span>.
                 Перейдите по ссылке <span className="font-semibold text-white">Confirm your mail</span> в письме — после этого вы автоматически попадёте в аккаунт на бирже.
@@ -287,17 +287,17 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ refId, onBack, onSuccess, o
                     if (res.ok) {
                       onSuccess();
                     } else {
-                      toast.show(res.error || 'Сначала подтвердите email', 'error');
+                      toast.show(res.error || t('auth_confirm_email_first'), 'error');
                     }
                   } catch (err: unknown) {
-                    toast.show(err instanceof Error ? err.message : 'Ошибка входа', 'error');
+                    toast.show(err instanceof Error ? err.message : t('auth_error_login'), 'error');
                   } finally {
                     setLoading(false);
                   }
                 }}
                 className="w-full py-4 rounded-2xl bg-neon text-black font-bold text-base shadow-lg shadow-neon/20 hover:bg-neon/90 disabled:opacity-60 active:scale-[0.99] transition-all"
               >
-                Я подтвердил email
+                {t('auth_confirmed_email')}
               </button>
               <button
                 type="button"
@@ -307,12 +307,12 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ refId, onBack, onSuccess, o
                   setResending(true);
                   const res = await resendEmailConfirmation(email);
                   setResending(false);
-                  if (!res.ok) toast.show(res.error || 'Ошибка', 'error');
-                  else toast.show('Письмо отправлено повторно', 'success');
+                  if (!res.ok) toast.show(res.error || t('error_generic'), 'error');
+                  else toast.show(t('auth_email_resent'), 'success');
                 }}
                 className="w-full py-3 rounded-2xl border border-border bg-card text-textPrimary font-semibold active:scale-[0.99] transition-all hover:bg-surface"
               >
-                {resending ? 'Отправляем…' : 'Отправить письмо ещё раз'}
+                {resending ? t('auth_resending') : t('auth_resend_email')}
               </button>
             </div>
           </div>
@@ -324,7 +324,7 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ refId, onBack, onSuccess, o
           <button
             type="button"
             className="absolute inset-0 bg-black/60"
-            aria-label="Закрыть"
+            aria-label={t('auth_close')}
             onClick={() => setShowConfirmModal(false)}
           />
           <div className="relative w-full sm:max-w-md mx-auto rounded-t-3xl sm:rounded-3xl border border-border bg-surface p-5 shadow-2xl">
@@ -340,7 +340,7 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ refId, onBack, onSuccess, o
                 rel="noreferrer"
                 className="w-full py-3 rounded-2xl bg-neon text-black font-bold text-base shadow-lg shadow-neon/20 hover:bg-neon/90 active:scale-[0.99] transition-all text-center"
               >
-                Открыть Gmail
+                {t('auth_open_gmail')}
               </a>
               <button
                 type="button"
@@ -360,12 +360,12 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ refId, onBack, onSuccess, o
                   setResending(true);
                   const res = await resendEmailConfirmation(email);
                   setResending(false);
-                  if (!res.ok) toast.show(res.error || 'Ошибка', 'error');
-                  else toast.show('Письмо отправлено повторно', 'success');
+                  if (!res.ok) toast.show(res.error || t('error_generic'), 'error');
+                  else toast.show(t('auth_email_resent'), 'success');
                 }}
                 className="w-full py-3 rounded-2xl border border-border bg-transparent text-textSecondary font-semibold active:scale-[0.99] transition-all hover:bg-card/60 disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                {resending ? 'Отправляем…' : 'Отправить письмо ещё раз'}
+                {resending ? t('auth_resending') : t('auth_resend_email')}
               </button>
             </div>
           </div>

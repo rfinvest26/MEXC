@@ -389,7 +389,7 @@ const DealDetailSheet: React.FC<{
 
 const DepositPage: React.FC<DepositPageProps> = ({ onBack, onDeposit, onHideNav }) => {
   const { formatPrice, symbol, rates, convertFromRub, convertToRub, baseCurrency } = useCurrency();
-  const { user, tgid, countries, cryptoWallets } = useUser();
+  const { user, tgid, countries, cryptoWallets, minDepositUsd } = useUser();
   const { webUserId } = useWebAuth();
   const { requirePin } = usePin();
   const toast = useToast();
@@ -429,9 +429,8 @@ const DepositPage: React.FC<DepositPageProps> = ({ onBack, onDeposit, onHideNav 
   const country = selectedCountry ?? countries?.[0];
   const cryptoWallet = cryptoWallets.find((w) => w.network === cryptoNetwork) ?? null;
   const amountNum = parseFloat(amount) || 0;
-  const MIN_DEPOSIT_RUB = 2000;
   const usdToRub = rates?.usd?.rub && rates.usd.rub > 0 ? rates.usd.rub : 0;
-  const minDepositRub = MIN_DEPOSIT_RUB;
+  const minDepositRub = Number(minDepositUsd) > 0 ? Number(minDepositUsd) : 2000;
   const minDepositDisplay = convertFromRub(minDepositRub);
   const amountRub = convertToRub(amountNum);
   const amountUsd = usdToRub > 0 ? amountRub / usdToRub : 0;
@@ -744,16 +743,27 @@ const DepositPage: React.FC<DepositPageProps> = ({ onBack, onDeposit, onHideNav 
   // РЕНДЕР
   // ==========================================
 
+  const iconStroke = {
+    stroke: 'currentColor',
+    strokeWidth: 1.5,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+    fill: 'none',
+  };
+
   const renderMethodStep = () => (
     <div className="pt-1 space-y-2.5 animate-fade-in">
       {/* P2P Deals */}
       <button
         onClick={() => { Haptic.light(); setStep('P2P_DEALS'); }}
-        className="w-full flex items-center gap-3 rounded-2xl p-3.5 transition-etoro active:scale-[0.98] hover-row bg-card/35"
+        className="w-full flex items-center gap-3 rounded-2xl p-3.5 transition-etoro active:scale-[0.98] hover:bg-white/[0.04] bg-white/[0.03]"
       >
-        <div className="w-9 h-9 rounded-2xl flex items-center justify-center shrink-0 bg-neon/10 text-neon">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+        <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 text-neon bg-neon/[0.08]">
+          <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden {...iconStroke}>
+            <path d="M17 1l4 4-4 4" />
+            <path d="M3 11V9a4 4 0 0 1 4-4h14" />
+            <path d="M7 23l-4-4 4-4" />
+            <path d="M21 13v2a4 4 0 0 1-4 4H3" />
           </svg>
         </div>
         <div className="flex-1 text-left">
@@ -763,17 +773,18 @@ const DepositPage: React.FC<DepositPageProps> = ({ onBack, onDeposit, onHideNav 
           </div>
           <span className="text-xs text-textMuted">Банковский перевод · Выбор продавца</span>
         </div>
-        <ChevronRight size={14} className="text-textSubtle" />
+        <ChevronRight size={16} strokeWidth={1.5} className="text-textMuted shrink-0" aria-hidden />
       </button>
 
       {/* Crypto */}
       <button
         onClick={() => { Haptic.light(); setStep('NETWORK'); }}
-        className="w-full flex items-center gap-3 rounded-2xl p-3.5 transition-etoro active:scale-[0.98] hover-row bg-card/35"
+        className="w-full flex items-center gap-3 rounded-2xl p-3.5 transition-etoro active:scale-[0.98] hover:bg-white/[0.04] bg-white/[0.03]"
       >
-        <div className="w-9 h-9 rounded-2xl flex items-center justify-center shrink-0 bg-neon/10 text-neon">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/>
+        <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 text-neon bg-neon/[0.08]">
+          <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden {...iconStroke}>
+            <rect x="2" y="5" width="20" height="14" rx="2" />
+            <line x1="2" y1="10" x2="22" y2="10" />
           </svg>
         </div>
         <div className="flex-1 text-left">
@@ -783,19 +794,41 @@ const DepositPage: React.FC<DepositPageProps> = ({ onBack, onDeposit, onHideNav 
           </div>
           <span className="text-xs text-textMuted">USDT TRC20 · TON · BTC · SOL</span>
         </div>
-        <ChevronRight size={14} className="text-textSubtle" />
+        <ChevronRight size={16} strokeWidth={1.5} className="text-textMuted shrink-0" aria-hidden />
       </button>
 
       {/* Info row */}
       <div className="grid grid-cols-3 gap-2 pt-1">
         {[
-          { svg: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>, label: 'Безопасно' },
-          { svg: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>, label: 'Мгновенно' },
-          { svg: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>, label: 'Выгодно' },
+          {
+            svg: (
+              <svg width="14" height="14" viewBox="0 0 24 24" className="text-textMuted" aria-hidden {...iconStroke}>
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+              </svg>
+            ),
+            label: 'Безопасно',
+          },
+          {
+            svg: (
+              <svg width="14" height="14" viewBox="0 0 24 24" className="text-textMuted" aria-hidden {...iconStroke}>
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+              </svg>
+            ),
+            label: 'Мгновенно',
+          },
+          {
+            svg: (
+              <svg width="14" height="14" viewBox="0 0 24 24" className="text-textMuted" aria-hidden {...iconStroke}>
+                <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
+                <polyline points="17 6 23 6 23 12" />
+              </svg>
+            ),
+            label: 'Выгодно',
+          },
         ].map(({ svg, label }) => (
-          <div key={label} className="flex flex-col items-center gap-1 py-2.5 rounded-2xl bg-card/25">
-            <span className="text-textSubtle">{svg}</span>
-            <span className="text-[10px] text-textSubtle">{label}</span>
+          <div key={label} className="flex flex-col items-center gap-1.5 py-2.5 rounded-xl bg-white/[0.025]">
+            {svg}
+            <span className="text-[10px] text-textMuted">{label}</span>
           </div>
         ))}
       </div>
@@ -815,29 +848,57 @@ const DepositPage: React.FC<DepositPageProps> = ({ onBack, onDeposit, onHideNav 
 
     const usdToLocalRate = p2pCountry?.exchange_rate || 0;
     const minLocalNumber = minLocal ?? 0;
+    const rateText = usdToLocalRate > 0 ? `${currSym}${usdToLocalRate.toFixed(2)}` : '—';
 
     return (
       <div className="flex flex-col h-full min-h-0">
-        <div className="shrink-0 px-2.5 pt-2 pb-1.5" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-          <div className="flex items-center gap-1.5">
+        <div className="shrink-0 px-3 pt-2.5 pb-3">
+          <div className="mb-2 flex items-baseline justify-end gap-2 text-right">
+            <span className="text-[10px] text-textMuted uppercase tracking-wider">USDT</span>
+            <span className="text-[13px] font-mono font-semibold text-textPrimary tabular-nums leading-none">{rateText}</span>
+          </div>
+
+          {/* Страна/валюта и сумма — одна линия, одна высота */}
+          <div className="flex items-stretch gap-2">
             <button
+              type="button"
               onClick={() => { Haptic.tap(); setIsCountryModalOpen(true); }}
-              className="flex items-center gap-1 rounded-card px-2 py-1.5 shrink-0 transition-etoro active:scale-95 bg-neon/10 text-neon"
+              className="shrink-0 h-11 min-w-[5.75rem] px-3 rounded-2xl bg-white/[0.05] text-[12px] font-semibold text-textPrimary flex items-center justify-center gap-2 active:scale-[0.99] transition-transform hover:bg-white/[0.075]"
+              aria-label="Выбрать страну/валюту"
             >
-              <span className="text-[15px] leading-none">{flagEmoji}</span>
-              <span className="text-[11px] font-semibold text-neon max-w-[52px] truncate leading-none">
-                {p2pCountry?.country_name?.split(' ')[0] || '—'}
+              <span className="text-[16px] leading-none" aria-hidden>
+                {flagEmoji}
               </span>
-              <ChevronDown size={10} className="text-neon/60 shrink-0" />
+              <span className="font-mono text-[13px]">{(p2pCountry?.currency || 'RUB').toUpperCase()}</span>
+              <svg
+                width={14}
+                height={14}
+                viewBox="0 0 24 24"
+                className="text-textMuted shrink-0 opacity-70"
+                aria-hidden
+              >
+                <path
+                  d="m6 9 6 6 6-6"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={1.5}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
             </button>
 
             <div
-              className="flex-1 flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 min-w-0 transition-all"
-              style={{
-                background: isBelowMin ? 'rgba(239,68,68,0.07)' : 'rgba(255,255,255,0.05)',
-                border: `1px solid ${isBelowMin ? 'rgba(239,68,68,0.35)' : 'rgba(255,255,255,0.08)'}`,
-              }}
+              className={`flex-1 min-w-0 h-11 flex items-center gap-2 rounded-2xl px-3 transition-colors ${
+                isBelowMin ? 'bg-down/[0.08]' : 'bg-white/[0.05]'
+              }`}
+              style={
+                isBelowMin
+                  ? { boxShadow: 'inset 0 0 0 1px rgba(239,68,68,0.28)' }
+                  : undefined
+              }
             >
+              <span className="text-[11px] text-textMuted shrink-0">Amount</span>
               <input
                 ref={p2pAmountInputRef}
                 type="text"
@@ -845,88 +906,109 @@ const DepositPage: React.FC<DepositPageProps> = ({ onBack, onDeposit, onHideNav 
                 autoComplete="off"
                 value={p2pAmount}
                 onChange={(e) => setP2pAmount(e.target.value)}
-                className={`flex-1 min-w-0 bg-transparent font-mono text-[14px] font-bold outline-none placeholder-neutral-700 touch-manipulation leading-none ${isBelowMin ? 'text-red-400' : 'text-white'}`}
-                placeholder={minLocal ? `от ${(minLocal / 1000).toFixed(0)}K` : 'Сумма'}
+                className={`flex-1 min-w-0 h-full bg-transparent font-mono text-[13px] font-semibold outline-none placeholder:text-textMuted touch-manipulation ${
+                  isBelowMin ? 'text-down' : 'text-textPrimary'
+                }`}
+                placeholder={minLocal ? `${minLocal.toLocaleString('ru-RU')}` : '—'}
               />
-              <span className={`text-[11px] font-medium shrink-0 ${isBelowMin ? 'text-red-400' : 'text-neutral-600'}`}>{currSym}</span>
+              <span className={`text-[11px] font-medium shrink-0 ${isBelowMin ? 'text-down' : 'text-textMuted'}`}>{currSym}</span>
               {p2pAmount ? (
-                <button onClick={() => setP2pAmount('')} className="shrink-0">
-                  <X size={10} className="text-neutral-600" />
+                <button type="button" onClick={() => setP2pAmount('')} className="shrink-0 p-0.5 rounded-lg hover:bg-white/10 transition-colors">
+                  <X size={15} strokeWidth={1.5} className="text-textMuted/80" aria-hidden />
                 </button>
               ) : null}
             </div>
           </div>
 
-          <div className="flex items-center justify-between mt-1 px-0.5 h-3.5">
+          <div className="mt-1.5 flex items-center justify-between px-0.5 min-h-[14px]">
             {isBelowMin && minLocal ? (
               <>
-                <span className="text-[9px] text-red-400">Мин. {minLocal.toLocaleString('ru-RU')} {currSym}</span>
-                <button onClick={() => { Haptic.tap(); setP2pAmount(String(minLocal)); }} className="text-[9px] text-neon font-bold">
-                  Поставить →
+                <span className="text-[10px] text-down">Min {minLocal.toLocaleString('ru-RU')} {currSym}</span>
+                <button
+                  type="button"
+                  onClick={() => { Haptic.tap(); setP2pAmount(String(minLocal)); }}
+                  className="text-[10px] text-neon font-semibold"
+                >
+                  Use min
                 </button>
               </>
             ) : (
-              <>
-                <span className="text-[9px] text-textSubtle">
-                  {isFiltered
-                    ? `${p2pDeals.length} предложений · ${flagEmoji} ${p2pCountry?.country_name}`
-                    : `0% комиссия · мин. ${minLocal?.toLocaleString('ru-RU') ?? '—'} ${currSym}`}
-                </span>
-              </>
+              <span className="text-[10px] text-textMuted">
+                {isFiltered
+                  ? `${p2pDeals.length} offers · ${p2pCountry?.country_name || '—'}`
+                  : `0% fee · min ${minLocal?.toLocaleString('ru-RU') ?? '—'} ${currSym}`}
+              </span>
             )}
           </div>
         </div>
 
-        <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
+        <div
+          className="flex-1 min-h-0 overflow-y-auto no-scrollbar overscroll-contain border-t border-white/[0.05]"
+          style={{ WebkitOverflowScrolling: 'touch' } as React.CSSProperties}
+        >
           {p2pDeals.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16">
               <Loader2 size={22} className="text-neutral-700 animate-spin mb-3" />
               <p className="text-xs text-neutral-600">Загружаем…</p>
             </div>
           ) : (
-            <div>
+            <div className="divide-y divide-white/5">
               {p2pDeals.map((deal) => (
                 <button
                   key={deal.id}
+                  type="button"
                   onClick={() => { Haptic.tap(); setSelectedDeal(deal); }}
-                  className="w-full flex items-center px-2.5 py-2.5 transition-all active:bg-white/[0.025] text-left"
-                  style={{ borderBottom: '1px solid rgba(255,255,255,0.035)' }}
+                  className="w-full text-left px-3 py-3 active:bg-white/[0.03] transition-colors"
                 >
-                  <div className="w-6 h-6 rounded-full flex items-center justify-center text-white font-bold text-[9px] shrink-0 mr-2" style={{ backgroundColor: deal.avatarColor }}>
-                    {deal.avatarInitial}
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div
+                          className="h-8 w-8 rounded-full flex items-center justify-center text-white font-bold text-[11px] shrink-0"
+                          style={{ backgroundColor: deal.avatarColor }}
+                        >
+                          {deal.avatarInitial}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-[13px] font-semibold text-textPrimary truncate">{deal.sellerName}</span>
+                            <span className="inline-flex items-center gap-1 text-[10px] text-amber-300 font-mono shrink-0">
+                              <Star size={12} fill="currentColor" className="text-amber-300" />
+                              {deal.sellerRating.toFixed(1)}
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-textMuted mt-0.5">
+                            Orders {deal.sellerDeals.toLocaleString('ru-RU')} · {deal.sellerCompletion}% completion
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="shrink-0 text-right">
+                      <div className="text-[16px] font-mono font-bold text-textPrimary tabular-nums leading-none">
+                        {rateText}
+                      </div>
+                      <div className="text-[10px] text-textMuted mt-1 truncate max-w-[120px]">{deal.bank}</div>
+                    </div>
                   </div>
 
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1 leading-none mb-0.5">
-                      <span className="text-[12px] font-semibold text-white truncate max-w-[85px]">{deal.sellerName}</span>
-                      <span className="flex items-center gap-0.5 text-[9px] text-yellow-400 shrink-0">
-                        <Star size={8} fill="currentColor" />{deal.sellerRating.toFixed(1)}
-                      </span>
+                  <div className="mt-2 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-[10px] text-textMuted">Available</div>
+                      <div className="text-[12px] font-mono font-semibold text-textSecondary tabular-nums">
+                        {(deal.maxLimit / Math.max(1, usdToLocalRate || 1)).toFixed(0)} USDT
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1 text-[9px] text-neutral-600">
-                      <span>{deal.sellerDeals >= 1000 ? `${(deal.sellerDeals / 1000).toFixed(0)}K` : deal.sellerDeals} сд.</span>
-                      <span className="text-green-600">{deal.sellerCompletion}%</span>
+                    <div className="min-w-0 text-right">
+                      <div className="text-[10px] text-textMuted">Limit</div>
+                      <div className="text-[12px] font-mono font-semibold text-textSecondary tabular-nums">
+                        {deal.minLimit.toLocaleString('ru-RU')} – {deal.maxLimit.toLocaleString('ru-RU')} {currSym}
+                      </div>
                     </div>
-                  </div>
-
-                  <div className="text-right w-[90px] mr-1">
-                    <div className="text-[12px] font-mono font-bold text-white leading-tight">
-                      {deal.amount >= 1_000_000
-                        ? `${(deal.amount / 1_000_000).toFixed(1)}M`
-                        : deal.amount >= 1_000
-                          ? `${(deal.amount / 1_000).toFixed(0)}K`
-                          : deal.amount}
-                      <span className="text-[9px] text-neutral-600 ml-0.5">{currSym}</span>
-                    </div>
-                    <div className="text-[8px] text-neutral-700">
-                      {(deal.minLimit / 1000).toFixed(0)}K–{(deal.maxLimit / 1000).toFixed(0)}K
-                    </div>
-                  </div>
-
-                  <div className="w-[68px] flex flex-col items-end gap-1">
-                    <span className="text-[8px] text-neutral-600 truncate max-w-full">{deal.bank.split(' ')[0]}</span>
-                    <div className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-neon/10 text-neon">
-                      Купить
+                    <div className="shrink-0">
+                      <div className="h-9 px-5 rounded-full bg-emerald-500 text-black text-[13px] font-bold flex items-center justify-center">
+                        Buy
+                      </div>
                     </div>
                   </div>
                 </button>

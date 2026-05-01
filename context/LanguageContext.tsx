@@ -14,7 +14,7 @@ const LanguageContext = createContext<LanguageContextValue | null>(null);
 function getStoredLocale(): Locale {
   try {
     const stored = localStorage.getItem(STORAGE_KEY) as Locale | null;
-    if (stored && ['en', 'ru', 'pl', 'cs', 'kk'].includes(stored)) return stored;
+    if (stored && ['en', 'ru', 'uk', 'pl', 'cs', 'kk'].includes(stored)) return stored;
   } catch {}
   return 'en';
 }

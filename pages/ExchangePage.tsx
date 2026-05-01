@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ChevronDown, ArrowLeftRight, Loader2 } from 'lucide-react';
+import { ChevronDown, ArrowLeftRight, Loader2, BarChart3, ArrowLeftRight as ConvertIcon } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import { useCurrency } from '../context/CurrencyContext';
 import { useUser } from '../context/UserContext';
@@ -10,7 +10,6 @@ import { spotBuy, spotSell } from '../lib/spot';
 import { useToast } from '../context/ToastContext';
 import ExchangeAssetPicker, { type ExchangeSide } from '../components/ExchangeAssetPicker';
 import type { SpotHolding } from '../types';
-import PageHeader from '../components/PageHeader';
 
 const MIN_EXCHANGE_RUB = 100;
 
@@ -19,6 +18,8 @@ interface ExchangePageProps {
   refreshSpotHoldings: () => Promise<void>;
   onPickerOpenChange?: (open: boolean) => void;
   onBack: () => void;
+  onRequireAuth?: () => void;
+  onGoTrading?: (tradeType: 'spot' | 'futures') => void;
 }
 
 const ExchangePage: React.FC<ExchangePageProps> = ({
@@ -26,6 +27,8 @@ const ExchangePage: React.FC<ExchangePageProps> = ({
   refreshSpotHoldings,
   onPickerOpenChange,
   onBack,
+  onRequireAuth,
+  onGoTrading,
 }) => {
   const { t } = useLanguage();
   const { formatPrice, symbol, convertToRub, convertFromRub, currencyCode } = useCurrency();
@@ -83,6 +86,14 @@ const ExchangePage: React.FC<ExchangePageProps> = ({
       ? balanceRub >= convertToRub(numAmount) && (isToCurrency || priceToRub > 0)
       : fromAmount >= numAmount && priceFromRub > 0 && (isToCurrency || priceToRub > 0));
 
+  const canSubmitForUi =
+    user
+      ? canSubmit
+      : fromSide !== toSide &&
+        numAmount > 0 &&
+        Number.isFinite(amountInRub) &&
+        amountInRub >= MIN_EXCHANGE_RUB;
+
   const amountPresetsRub = useMemo(
     () =>
       [...new Set([MIN_EXCHANGE_RUB, 1000, 5000, Math.floor(balanceRub * 0.5), balanceRub])]
@@ -104,7 +115,11 @@ const ExchangePage: React.FC<ExchangePageProps> = ({
   }, [fromSide]);
 
   const handleSubmit = async () => {
-    if (!user || !canSubmit) return;
+    if (!user) {
+      onRequireAuth?.();
+      return;
+    }
+    if (!canSubmit) return;
     Haptic.tap();
     setLoading(true);
     try {
@@ -182,25 +197,66 @@ const ExchangePage: React.FC<ExchangePageProps> = ({
     : `≈ ${resultInCrypto.toFixed(8)} ${toSide}`;
 
   return (
-    <div className="flex flex-col h-full min-h-0 animate-fade-in">
-      <PageHeader
-        title={t('exchange_title')}
-        onBack={onBack}
-        right={
-          <div className="h-10 w-10 rounded-2xl bg-card/45 flex items-center justify-center text-neon">
-            <ArrowLeftRight size={18} strokeWidth={2} />
+    <div className="flex flex-col h-full min-h-0 animate-fade-in bg-background">
+      {/* MEXC-like header: Convert / Spot / Futures */}
+      <div className="sticky top-0 z-40 bg-background hairline-bottom">
+        <div className="px-4 pt-2 pb-2 flex items-center gap-4 text-[15px] font-semibold">
+          <button
+            type="button"
+            onClick={() => { Haptic.tap(); }}
+            className="text-textPrimary"
+            aria-current="page"
+          >
+            {t('exchange_mode_convert')}
+          </button>
+          <button
+            type="button"
+            onClick={() => { Haptic.tap(); onGoTrading?.('spot'); onBack(); }}
+            className="text-textSubtle hover:text-textPrimary transition-colors"
+          >
+            {t('exchange_mode_spot')}
+          </button>
+          <button
+            type="button"
+            onClick={() => { Haptic.tap(); onGoTrading?.('futures'); onBack(); }}
+            className="text-textSubtle hover:text-textPrimary transition-colors"
+          >
+            {t('exchange_mode_futures')}
+          </button>
+          <div className="flex-1" />
+          <div className="h-9 w-9 rounded-2xl bg-black/30 border border-white/5 flex items-center justify-center text-textSecondary">
+            <ConvertIcon size={18} />
           </div>
-        }
-      />
+        </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-4 pb-28">
-        <div className="max-w-md w-full mx-auto space-y-4">
+        {/* Pair row (like Trading): shows current convert pair + chart button */}
+        <div className="px-4 pb-2">
+          <div className="flex items-center gap-2">
+            <div className="font-mono text-[16px] font-bold text-textPrimary truncate">
+              {fromSide === 'currency' ? currencyCode : fromSide}
+              <span className="text-textSubtle mx-1">/</span>
+              {toSide === 'currency' ? currencyCode : toSide}
+            </div>
+            <div className="flex-1" />
+            <button
+              type="button"
+              onClick={() => { Haptic.tap(); onGoTrading?.('spot'); onBack(); }}
+              className="h-9 w-9 rounded-2xl flex items-center justify-center active:scale-[0.98] transition-transform bg-black/30 text-textSecondary border border-white/5"
+              aria-label={t('chart_title')}
+              title={t('chart_title')}
+            >
+              <BarChart3 size={18} />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-4 py-3 pb-24">
+        <div className="max-w-md w-full mx-auto space-y-3">
           {/* Карточка: Отдаю */}
-          <div className="rounded-2xl bg-card/35 overflow-hidden hairline-top hairline-bottom">
-            <div className="px-3 py-2 bg-surface/50 hairline-bottom">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-textMuted">
-                {t('from_label')}
-              </p>
+          <div className="rounded-3xl bg-white/5 overflow-hidden">
+            <div className="px-3 py-2">
+              <p className="text-[11px] font-semibold text-textSubtle">{t('from_label')}</p>
             </div>
             <div className="p-3 space-y-3">
               <button
@@ -209,7 +265,7 @@ const ExchangePage: React.FC<ExchangePageProps> = ({
                   Haptic.tap();
                   openPicker('from');
                 }}
-                className="touch-target w-full flex items-center justify-between gap-2 py-2.5 px-3 rounded-2xl bg-surface/60 border border-border hover:border-neon/40 transition-colors text-left"
+                className="touch-target w-full flex items-center justify-between gap-2 py-2.5 px-3 rounded-2xl bg-black/30 border border-white/5 transition-colors text-left"
               >
                 <div className="min-w-0 flex-1">
                   <p className="font-mono font-semibold text-sm text-textPrimary truncate">{fromLabel}</p>
@@ -225,7 +281,7 @@ const ExchangePage: React.FC<ExchangePageProps> = ({
                 placeholder={isFromCurrency ? `0 ${symbol}` : '0'}
                 value={amount}
                 onChange={(e) => setAmount(sanitizeDecimalInput(e.target.value))}
-                className="w-full bg-surface/60 border border-border rounded-2xl px-3 py-2.5 text-textPrimary font-mono text-sm placeholder:text-textMuted focus:outline-none focus:border-neon/50 focus:ring-1 focus:ring-neon/20 transition-colors"
+                className="w-full bg-black/30 border border-white/5 rounded-2xl px-3 py-2.5 text-textPrimary font-mono text-sm placeholder:text-textMuted focus:outline-none focus:border-white/10 transition-colors"
               />
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-[10px] font-mono text-textMuted">
@@ -268,11 +324,9 @@ const ExchangePage: React.FC<ExchangePageProps> = ({
           </div>
 
           {/* Карточка: Получаю */}
-          <div className="rounded-2xl bg-card/35 overflow-hidden hairline-top hairline-bottom">
-            <div className="px-3 py-2 bg-surface/50 hairline-bottom">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-textMuted">
-                {t('to_label')}
-              </p>
+          <div className="rounded-3xl bg-white/5 overflow-hidden">
+            <div className="px-3 py-2">
+              <p className="text-[11px] font-semibold text-textSubtle">{t('to_label')}</p>
             </div>
             <div className="p-3">
               <button
@@ -281,7 +335,7 @@ const ExchangePage: React.FC<ExchangePageProps> = ({
                   Haptic.tap();
                   openPicker('to');
                 }}
-                className="touch-target w-full flex items-center justify-between gap-2 py-2.5 px-3 rounded-2xl bg-surface/60 border border-border hover:border-neon/40 transition-colors text-left"
+                className="touch-target w-full flex items-center justify-between gap-2 py-2.5 px-3 rounded-2xl bg-black/30 border border-white/5 transition-colors text-left"
               >
                 <div className="min-w-0 flex-1">
                   <p className="font-mono font-semibold text-sm text-textPrimary truncate">{toLabel}</p>
@@ -294,10 +348,13 @@ const ExchangePage: React.FC<ExchangePageProps> = ({
                 <ChevronDown size={16} className="text-textMuted flex-shrink-0" />
               </button>
               {amount && numAmount > 0 && (
-                <p className="mt-3 text-sm font-mono font-bold text-neon">
-                  {resultText}
-                  {isToCurrency && <span className="text-textMuted font-normal ml-2">({currencyCode})</span>}
-                </p>
+                <div className="mt-3 rounded-2xl bg-black/25 px-3 py-2 flex items-center justify-between">
+                  <span className="text-[11px] text-textSubtle font-semibold">{t('you_receive')}</span>
+                  <span className="text-[13px] font-mono font-bold text-textPrimary">
+                    {resultText}
+                    {isToCurrency && <span className="text-textSubtle font-normal ml-2">({currencyCode})</span>}
+                  </span>
+                </div>
               )}
             </div>
           </div>
@@ -306,8 +363,8 @@ const ExchangePage: React.FC<ExchangePageProps> = ({
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={!canSubmit || loading}
-            className="w-full touch-target min-h-[52px] py-3 rounded-2xl bg-neon text-black font-bold text-sm disabled:opacity-70 disabled:pointer-events-none active:scale-[0.98] transition-all hover-glow flex items-center justify-center gap-2"
+            disabled={!canSubmitForUi || loading}
+            className="w-full touch-target h-12 rounded-2xl bg-neon text-black font-bold text-base disabled:opacity-60 disabled:pointer-events-none active:scale-[0.98] transition-all flex items-center justify-center gap-2"
           >
             {loading ? (
               <>

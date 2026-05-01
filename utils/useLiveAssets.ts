@@ -2,8 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Asset } from '../types';
 import { fetchAssetPricesInRub, getCachedPrices, isCacheExpired } from '../lib/cryptoPrices';
 
-// Обновляем раз в 10 минут — цены не нужны чаще
-const FETCH_INTERVAL_MS = 10 * 60 * 1000;
+const DEFAULT_FETCH_INTERVAL_MS = 10_000;
 
 function tickerKey(assets: Asset[]): string {
   return assets.map((a) => a.ticker).sort().join(',');
@@ -15,7 +14,7 @@ function mergeWithCache(base: Asset[]): Asset[] {
   return base.map((a) => {
     const data = cached[a.ticker];
     if (!data) return { ...a };
-    return { ...a, price: data.price, change24h: data.change24h };
+    return { ...a, price: data.price, change24h: data.change24h, priceUnavailable: !(data.price > 0) };
   });
 }
 
@@ -23,14 +22,14 @@ function mergeWithCachePreservingPrev(base: Asset[], prev: Asset[]): Asset[] {
   const cached = getCachedPrices();
   return base.map((a) => {
     const data = cached?.[a.ticker];
-    if (data) return { ...a, price: data.price, change24h: data.change24h };
+    if (data) return { ...a, price: data.price, change24h: data.change24h, priceUnavailable: !(data.price > 0) };
     const prevAsset = prev.find((p) => p.ticker === a.ticker);
     if (prevAsset) return prevAsset;
     return { ...a };
   });
 }
 
-export function useLiveAssets(baseAssets: Asset[]): Asset[] {
+export function useLiveAssets(baseAssets: Asset[], options?: { intervalMs?: number }): Asset[] {
   // Мгновенный старт из кеша — нет мигания
   const [assets, setAssets] = useState<Asset[]>(() => mergeWithCache(baseAssets));
   const baseRef = useRef(baseAssets);
@@ -48,7 +47,11 @@ export function useLiveAssets(baseAssets: Asset[]): Asset[] {
   }, [baseAssets]);
 
   useEffect(() => {
-    const tickers = baseRef.current.map((a) => a.ticker);
+    // Binance quotes endpoint supports only crypto tickers (e.g. BTCUSDT).
+    // Forex/stocks/commodities are shown via TradingView only and must not be requested here.
+    const tickers = baseRef.current
+      .filter((a) => (a.category ?? 'crypto') === 'crypto')
+      .map((a) => a.ticker);
     if (tickers.length === 0) return;
 
     const applyPrices = (prices: Record<string, { price: number; change24h: number }>) => {
@@ -56,7 +59,7 @@ export function useLiveAssets(baseAssets: Asset[]): Asset[] {
         prev.map((a) => {
           const data = prices[a.ticker];
           if (!data) return a;
-          return { ...a, price: data.price, change24h: data.change24h };
+          return { ...a, price: data.price, change24h: data.change24h, priceUnavailable: !(data.price > 0) };
         })
       );
     };
@@ -75,9 +78,13 @@ export function useLiveAssets(baseAssets: Asset[]): Asset[] {
       update();
     }
 
-    const interval = setInterval(update, FETCH_INTERVAL_MS);
+    const intervalMs =
+      typeof options?.intervalMs === 'number' && Number.isFinite(options.intervalMs) && options.intervalMs > 250
+        ? options.intervalMs
+        : DEFAULT_FETCH_INTERVAL_MS;
+    const interval = setInterval(update, intervalMs);
     return () => clearInterval(interval);
-  }, []);
+  }, [options?.intervalMs]);
 
   return assets;
 }

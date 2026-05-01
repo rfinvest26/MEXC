@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Gem, Info, TrendingUp } from 'lucide-react';
-import type { SpotHolding, StakingPosition, StakingRate } from '../types';
-import type { Asset } from '../types';
+import type { SpotHolding, StakingPosition, StakingRate, Asset, NavigateToTradingOptions } from '../types';
 import { MARKET_ASSETS } from '../constants';
 import { useLiveAssets } from '../utils/useLiveAssets';
 import { useLanguage } from '../context/LanguageContext';
@@ -30,7 +29,7 @@ interface StakingPageProps {
   stakingRates: StakingRate[];
   refreshStaking: () => Promise<void>;
   userId: number;
-  onNavigateToTrading: (asset: Asset, options?: { tradeType?: 'futures' | 'spot'; spotAction?: 'buy' | 'sell' }) => void;
+  onNavigateToTrading: (asset: Asset, options?: NavigateToTradingOptions) => void;
   onBack?: () => void;
 }
 
@@ -96,7 +95,7 @@ const StakingPage: React.FC<StakingPageProps> = ({
     const maxAmount = holding?.amount ?? 0;
     if (maxAmount <= 0) {
       const asset = liveMarket.find((item) => item.ticker === ticker);
-      if (asset) onNavigateToTrading(asset, { tradeType: 'spot', spotAction: 'buy' });
+      if (asset) onNavigateToTrading(asset, { tradeType: 'spot', spotAction: 'buy', initialActiveTab: 'TRADE' });
       return;
     }
     const rate = rateByTicker[ticker];
@@ -109,7 +108,7 @@ const StakingPage: React.FC<StakingPageProps> = ({
     const asset = liveMarket.find((item) => item.ticker === ticker);
     const priceRub = asset?.price ?? 0;
     if (priceRub <= 0) {
-      toast.show('Price unknown', 'error');
+      toast.show(t('price_unknown'), 'error');
       return;
     }
     setLoading(true);
@@ -119,10 +118,10 @@ const StakingPage: React.FC<StakingPageProps> = ({
     if (res.ok) {
       await refreshStaking();
       Haptic.success();
-      toast.show(`${t('unstake_btn')} OK`, 'success');
+      toast.show(t('unstake_btn'), 'success');
     } else {
       Haptic.error();
-      toast.show(res.error || 'Error', 'error');
+      toast.show(res.error || t('error_generic'), 'error');
     }
   };
 

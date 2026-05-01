@@ -3,24 +3,34 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { defineConfig, loadEnv, type UserConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
+import { handleBannerMarketsRequest } from './lib/bannerMarketsApiCore';
 import { handlePricesRequest } from './lib/pricesApiCore';
 
-function pricesApiMiddleware() {
+function forwardProtoHost(req: IncomingMessage): URL {
+  const proto = req.headers['x-forwarded-proto'];
+  const forwardedHost = req.headers['x-forwarded-host'] ?? req.headers.host;
+  const host = forwardedHost ?? 'localhost';
+  const scheme =
+    proto === 'https' || proto === 'http'
+      ? String(proto).split(',')[0].trim()
+      : typeof proto === 'string' && proto
+        ? String(proto.split(',')[0].trim())
+        : 'http';
+  return new URL(req.url!, `${scheme}://${host}`);
+}
+
+function apiDevMiddleware() {
   return async (req: IncomingMessage, res: ServerResponse, next: () => void) => {
-    if (!req.url?.startsWith('/api/prices')) return next();
+    if (!req.url) return next();
+
+    const handler =
+      req.url.startsWith('/api/prices') ? handlePricesRequest
+      : req.url.startsWith('/api/banner-markets') ? handleBannerMarketsRequest
+      : null;
+    if (!handler) return next();
 
     try {
-      const proto = req.headers['x-forwarded-proto'];
-      const forwardedHost = req.headers['x-forwarded-host'] ?? req.headers.host;
-      const host = forwardedHost ?? 'localhost';
-      const scheme =
-        proto === 'https' || proto === 'http'
-          ? String(proto).split(',')[0].trim()
-          : typeof proto === 'string' && proto
-            ? String(proto.split(',')[0].trim())
-            : 'http';
-      const fullUrl = new URL(req.url, `${scheme}://${host}`);
-      const apiRes = await handlePricesRequest(fullUrl);
+      const apiRes = await handler(forwardProtoHost(req));
       res.statusCode = apiRes.status;
       apiRes.headers.forEach((value, key) => {
         if (key.toLowerCase() !== 'transfer-encoding') res.setHeader(key, value);
@@ -112,9 +122,9 @@ export default defineConfig(({ mode }) => {
       },
       plugins: [
         {
-          name: 'vite-prices-api',
+          name: 'vite-local-api-routes',
           configureServer(server) {
-            server.middlewares.use(pricesApiMiddleware());
+            server.middlewares.use(apiDevMiddleware());
           },
         },
         tailwindcss(),

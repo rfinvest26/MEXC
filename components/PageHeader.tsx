@@ -19,7 +19,7 @@ export interface PageHeaderProps {
 }
 
 const BACK_BUTTON_CLASS =
-  'touch-target px-2 py-2 -ml-1 rounded-xl text-textMuted hover:text-textPrimary hover:bg-card active:scale-95 transition-all flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-neon/30 min-h-[44px] min-w-[44px]';
+  'touch-target px-2 py-2 -ml-1 rounded-xl text-textMuted hover:text-textPrimary hover:bg-card active:scale-95 transition-all flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-neon/30 min-h-[40px] min-w-[40px]';
 
 /**
  * Единая шапка вложенных экранов: одна кнопка «Назад» слева, заголовок по центру.
@@ -43,7 +43,7 @@ const PageHeader: React.FC<PageHeaderProps> = ({ title, onBack, right, className
             className={BACK_BUTTON_CLASS}
             aria-label="Назад"
           >
-            <ArrowLeft size={22} strokeWidth={2} />
+            <ArrowLeft size={20} strokeWidth={1.75} className="icon-muted" />
           </button>
         ) : (
           <div className="w-10 h-10 shrink-0" aria-hidden />

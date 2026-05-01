@@ -2,7 +2,7 @@ import type { Asset } from '../types';
 import { getTradingViewSymbolForAsset, getTradingViewSymbol } from './chartSymbol';
 import { getCoinGeckoId } from '../lib/cryptoPrices';
 
-export type ChartProvider = 'TV' | 'INV' | 'GCK';
+export type ChartProvider = 'TV' | 'GCK';
 export type ChartStyle = 'candles' | 'bars' | 'line';
 export type ChartInterval = '1m' | '5m' | '15m' | '1h' | '4h' | '1D' | '1W';
 
@@ -53,7 +53,6 @@ function mapChartStyleToTvStyle(style?: ChartStyle): string {
 /**
  * Унифицированный embed-источник для вкладки CHART:
  * - TV: TradingView widgetembed
- * - INV: Investing.com widgetlab (для Forex)
  * - GCK: CoinGecko web component (для crypto)
  */
 export function getChartEmbed(asset: Asset, options: GetChartEmbedOptions): ChartEmbedResult {
@@ -99,24 +98,6 @@ export function getChartEmbed(asset: Asset, options: GetChartEmbedOptions): Char
     });
 
     return { kind: 'iframe', src: `https://s.tradingview.com/widgetembed/?${params.toString()}` };
-  }
-
-  // Investing.com (Forex)
-  if (provider === 'INV') {
-    // Если внезапно пытаемся показать INV не для forex — fallback на TV.
-    if (asset.category !== 'forex') {
-      const tv = getChartEmbed(asset, { provider: 'TV', interval: options.interval, chartStyle: options.chartStyle });
-      return tv.kind === 'iframe' ? tv : { kind: 'iframe', src: '' };
-    }
-
-    // widgetlab/live_currency_rates использует пары как EURUSD, GBPUSD и т.д.
-    // Высота/ширина контент-100% — задаём в iframe атрибутах.
-    const pairs = asset.ticker;
-    const src = `https://www.investing.com/widgetlab/live_currency_rates?theme=dark&pairs=${encodeURIComponent(
-      pairs
-    )}&width=100%&height=100%&bg_color=131722&text_color=9ca3af&bold_color=FFFFFF`;
-
-    return { kind: 'iframe', src };
   }
 
   // CoinGecko widget (crypto)

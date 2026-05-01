@@ -1,10 +1,13 @@
 import React from 'react';
-import { Home, Coins, BarChart2, Briefcase, Percent, MessageCircle, LogOut, ShieldCheck, ShieldAlert, User } from 'lucide-react';
+import { Percent, MessageCircle, LogOut, ShieldCheck, ShieldAlert, User } from 'lucide-react';
 import { PageView, NavItem } from '../types';
 import { Haptic } from '../utils/haptics';
 import { useLanguage } from '../context/LanguageContext';
 import { useUser } from '../context/UserContext';
 import { useWebAuth } from '../context/WebAuthContext';
+import Skeleton from './Skeleton';
+import { NavHomeIcon, NavMarketsIcon, NavTradeIcon, NavWalletIcon } from './icons/MexcNavIcons';
+import UnifiedMarketsRibbon from './UnifiedMarketsRibbon';
 
 interface SidebarNavProps {
   currentPage: PageView;
@@ -20,29 +23,31 @@ const pageToNav: Partial<Record<PageView, PageView>> = {
   LANGUAGE: 'HOME',
   CURRENCY: 'HOME',
   QR_SCANNER: 'HOME',
-  EXCHANGE: 'STAKING',
+  NFT_COLLECTION: 'COINS',
+  NFT_ITEM: 'COINS',
 };
 
 const SidebarNav: React.FC<SidebarNavProps> = ({ currentPage, onNavigate }) => {
   const { t } = useLanguage();
-  const { user, tgid, webUserId } = useUser();
+  const { user, tgid, webUserId, loading } = useUser();
   const { logout } = useWebAuth();
 
   const navItems: NavItem[] = [
-    { id: 'HOME', label: t('nav_home'), icon: Home },
-    { id: 'COINS', label: t('nav_coins'), icon: Coins },
-    { id: 'TRADING', label: t('nav_trading'), icon: BarChart2 },
+    { id: 'HOME', label: t('nav_home'), icon: NavHomeIcon },
+    { id: 'COINS', label: t('nav_coins'), icon: NavMarketsIcon },
+    { id: 'TRADING', label: t('nav_trading'), icon: NavTradeIcon },
     { id: 'STAKING', label: t('staking_title'), icon: Percent },
-    { id: 'DEALS', label: t('nav_deals'), icon: Briefcase },
+    { id: 'DEALS', label: t('nav_deals'), icon: NavWalletIcon },
   ];
 
   const activeNav = pageToNav[currentPage] ?? currentPage;
   const isWebUser = !!(user?.web_registered || (user?.email && !tgid));
   const displayName = user?.full_name || user?.username || (user?.email ? user.email.split('@')[0] : t('guest'));
   const balance = user?.balance ?? 0;
+  const balanceLoading = Boolean(loading && (tgid || webUserId));
 
   return (
-    <aside className="hidden lg:flex flex-col w-56 min-w-[14rem] shrink-0 bg-background border-r border-border/40">
+    <aside className="hidden lg:flex flex-col w-60 min-w-[15rem] shrink-0 bg-background border-r border-border/40">
       <div className="sticky top-0 flex flex-col h-screen py-6 px-3">
         {/* User info block */}
         {user ? (
@@ -60,9 +65,13 @@ const SidebarNav: React.FC<SidebarNavProps> = ({ currentPage, onNavigate }) => {
             </div>
             <div className="mb-2">
               <p className="text-[10px] text-textMuted uppercase tracking-wide mb-0.5">{t('balance')}</p>
-              <p className="text-base font-bold text-neon font-mono">
-                {balance.toLocaleString('ru-RU', { maximumFractionDigits: 2 })}
-              </p>
+              {balanceLoading ? (
+                <Skeleton className="w-24 h-5 rounded bg-card/60" />
+              ) : (
+                <p className="text-base font-bold text-neon font-mono">
+                  {balance.toLocaleString('ru-RU', { maximumFractionDigits: 2 })}
+                </p>
+              )}
             </div>
             <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${
               user.is_kyc ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400'
@@ -80,24 +89,37 @@ const SidebarNav: React.FC<SidebarNavProps> = ({ currentPage, onNavigate }) => {
           </div>
         )}
 
+        <UnifiedMarketsRibbon />
+
         {/* Nav items */}
         <nav className="flex flex-col gap-0.5 flex-1">
           {navItems.map((item) => {
             const isActive = activeNav === item.id;
             const Icon = item.icon;
+            const isMexcSvg = item.id === 'HOME' || item.id === 'COINS' || item.id === 'TRADING' || item.id === 'DEALS';
             return (
               <button
                 key={item.id}
                 onClick={() => { Haptic.tap(); onNavigate(item.id); }}
                 title={item.label}
-                className={`cursor-pointer flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-colors duration-150 ${
+                className={`cursor-pointer flex items-center gap-3 px-3 py-2.5 rounded-2xl text-left transition-colors duration-150 ${
                   isActive
-                    ? 'bg-accentMuted text-neon'
+                    ? 'bg-accentMuted text-textPrimary'
                     : 'text-textSecondary hover:text-textPrimary hover:bg-white/[0.06]'
                 }`}
+                aria-current={isActive ? 'page' : undefined}
               >
-                <Icon size={20} strokeWidth={2} />
-                <span className="font-medium text-sm tracking-tight">{item.label}</span>
+                <div className={isActive ? 'nav-icon-pill nav-active-pop rounded-2xl h-9 w-11 flex items-center justify-center text-neon' : 'rounded-2xl h-9 w-11 flex items-center justify-center text-textMuted'}>
+                  {isMexcSvg ? (
+                    <Icon active={isActive} className={isActive ? 'icon-soft' : 'icon-muted'} size={20} />
+                  ) : (
+                    <Icon size={18} strokeWidth={1.9} className={isActive ? 'text-neon' : 'text-textMuted'} />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <span className="font-semibold text-sm tracking-tight truncate block">{item.label}</span>
+                </div>
+                {isActive ? <span className="nav-dot nav-active-pop" aria-hidden /> : null}
               </button>
             );
           })}

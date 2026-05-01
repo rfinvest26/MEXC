@@ -3,10 +3,9 @@ import { useLanguage } from '../context/LanguageContext';
 import AssetTable from '../components/AssetTable';
 import Skeleton from '../components/Skeleton';
 import { MOCK_ASSETS } from '../constants';
-import { Asset, PageView } from '../types';
+import { Asset, PageView, type NavigateToTradingOptions } from '../types';
 import { useLiveAssets } from '../utils/useLiveAssets';
 import {
-  Bell,
   Gift,
   Headphones,
   MoreHorizontal,
@@ -27,17 +26,19 @@ import { useCurrency } from '../context/CurrencyContext';
 import { useHideOnScroll } from '../utils/useHideOnScroll';
 import { supabase } from '../lib/supabase';
 import BottomSheet from '../components/BottomSheet';
+import CryptoBannerWidget from '../components/CryptoBannerWidget';
 
 interface HomePageProps {
     balance: number;
+    balanceLoading?: boolean;
     user: import('../context/UserContext').DbUser | null;
-    onNavigateToTrading: (asset: Asset) => void;
+    onNavigateToTrading: (asset: Asset, options?: NavigateToTradingOptions) => void;
     onSearch: () => void;
     onNavigate: (page: PageView) => void;
     onCurrencyClick?: () => void;
 }
 
-const HomePage: React.FC<HomePageProps> = ({ balance, user, onNavigateToTrading, onSearch, onNavigate, onCurrencyClick }) => {
+const HomePage: React.FC<HomePageProps> = ({ balance, balanceLoading = false, user, onNavigateToTrading, onSearch, onNavigate, onCurrencyClick }) => {
   const { t } = useLanguage();
   const { formatPrice, currencyCode } = useCurrency();
   const liveAssets = useLiveAssets(MOCK_ASSETS);
@@ -108,7 +109,7 @@ const HomePage: React.FC<HomePageProps> = ({ balance, user, onNavigateToTrading,
             type="button"
             onClick={() => { Haptic.tap(); onNavigate('PROFILE'); }}
             className="touch-target h-8 w-8 rounded-full bg-card/45 flex items-center justify-center active:scale-[0.98] transition-transform shrink-0"
-            aria-label="Profile"
+            aria-label={t('profile')}
           >
             {user?.photo_url ? (
               <img src={user.photo_url} alt="" className="h-10 w-10 rounded-full object-cover" />
@@ -128,7 +129,7 @@ const HomePage: React.FC<HomePageProps> = ({ balance, user, onNavigateToTrading,
                 value={searchValue}
                 onChange={(e) => setSearchValue(e.target.value)}
                 className="bg-transparent outline-none text-sm text-textPrimary placeholder:text-textSubtle w-full min-w-0"
-                placeholder="Search"
+                placeholder={t('search')}
               />
             </button>
           </div>
@@ -138,17 +139,9 @@ const HomePage: React.FC<HomePageProps> = ({ balance, user, onNavigateToTrading,
               type="button"
               onClick={() => { Haptic.tap(); onNavigate('SUPPORT'); }}
               className="touch-target h-8 w-8 rounded-full bg-card/45 flex items-center justify-center active:scale-[0.98] transition-transform"
-              aria-label="Support"
+              aria-label={t('support')}
             >
               <Headphones size={17} className="text-textSecondary" />
-            </button>
-            <button
-              type="button"
-              onClick={() => { Haptic.tap(); onNavigate('SUPPORT'); }}
-              className="touch-target h-8 w-8 rounded-full bg-card/45 flex items-center justify-center active:scale-[0.98] transition-transform"
-              aria-label="Notifications"
-            >
-              <Bell size={17} className="text-textSecondary" />
             </button>
           </div>
         </div>
@@ -158,9 +151,9 @@ const HomePage: React.FC<HomePageProps> = ({ balance, user, onNavigateToTrading,
       <section className="pt-2 pb-3">
         <div className="flex items-center justify-between gap-4">
           <div className="min-w-0 flex flex-col justify-center">
-            <div className="text-textSubtle text-xs leading-none">Total Assets</div>
+            <div className="text-textSubtle text-xs leading-none">{t('home_total_assets')}</div>
             <div className="flex items-baseline gap-2 mt-1">
-              {Number.isNaN(balance) ? (
+              {balanceLoading ? (
                 <Skeleton className="w-28 h-8 rounded-lg bg-card/60" />
               ) : (
                 <span className="text-3xl font-semibold tracking-tight text-ink tabular-nums leading-[1]">
@@ -182,7 +175,7 @@ const HomePage: React.FC<HomePageProps> = ({ balance, user, onNavigateToTrading,
             onClick={() => { Haptic.tap(); onNavigate('DEPOSIT'); }}
             className="touch-target px-4 h-9 rounded-full bg-neon text-black text-sm font-semibold shadow-sm shadow-neon/15 active:scale-[0.98] transition-transform flex items-center justify-center"
           >
-            Deposit
+            {t('deposit')}
           </button>
         </div>
       </section>
@@ -194,8 +187,8 @@ const HomePage: React.FC<HomePageProps> = ({ balance, user, onNavigateToTrading,
         >
           <div className="min-w-0">
             <div className="text-xs text-textPrimary truncate">
-              3/3&nbsp;&nbsp;Complete Your Futures Trade
-              <span className="text-neon font-semibold">&nbsp;Try Now</span>
+              3/3&nbsp;&nbsp;{t('home_complete_futures_banner')}
+              <span className="text-neon font-semibold">&nbsp;{t('home_try_now')}</span>
             </div>
           </div>
           <button
@@ -203,7 +196,7 @@ const HomePage: React.FC<HomePageProps> = ({ balance, user, onNavigateToTrading,
             onClick={() => { Haptic.tap(); onNavigate('TRADING'); }}
             className="touch-target h-8 px-3 rounded-xl bg-surface/60 text-textPrimary text-xs font-semibold active:scale-[0.98] transition-transform"
           >
-            Go
+            {t('home_go')}
           </button>
         </div>
       </section>
@@ -212,10 +205,10 @@ const HomePage: React.FC<HomePageProps> = ({ balance, user, onNavigateToTrading,
       <section className="pb-5">
         <div className="grid grid-cols-4 gap-2.5">
           {[
-            { label: 'Deposit', Icon: ArrowDownLeft, badge: null, onClick: () => onNavigate('DEPOSIT') },
-            { label: 'Staking', Icon: Gem, badge: null, onClick: () => onNavigate('STAKING') },
-            { label: 'Scan', Icon: Scan, badge: null, onClick: () => onNavigate('QR_SCANNER') },
-            { label: 'Profile', Icon: User, badge: null, onClick: () => onNavigate('PROFILE') },
+            { label: t('deposit'), Icon: ArrowDownLeft, badge: null, onClick: () => onNavigate('DEPOSIT') },
+            { label: t('staking_title'), Icon: Gem, badge: null, onClick: () => onNavigate('STAKING') },
+            { label: t('quick_scan'), Icon: Scan, badge: null, onClick: () => onNavigate('QR_SCANNER') },
+            { label: t('profile'), Icon: User, badge: null, onClick: () => onNavigate('PROFILE') },
           ].map(({ label, Icon, badge, onClick }) => (
             <button
               key={label}
@@ -256,7 +249,7 @@ const HomePage: React.FC<HomePageProps> = ({ balance, user, onNavigateToTrading,
             onNavigate('DEPOSIT');
           }}
           className="w-full text-left rounded-3xl overflow-hidden bg-card/35 active:scale-[0.99] transition-transform"
-          aria-label="Special offer"
+          aria-label={t('special_offer')}
         >
           <div className="relative">
             <img
@@ -270,7 +263,7 @@ const HomePage: React.FC<HomePageProps> = ({ balance, user, onNavigateToTrading,
 
             <div className="absolute left-3 top-3 flex items-center gap-2 rounded-full bg-black/35 backdrop-blur px-2.5 py-1.5">
               <img src="/mexc-logo.png" alt="" className="h-4 w-auto opacity-95" />
-              <span className="text-[11px] font-semibold text-white/90">{workerEvent ? workerEvent.title : 'Special offer'}</span>
+              <span className="text-[11px] font-semibold text-white/90">{workerEvent ? workerEvent.title : t('special_offer')}</span>
             </div>
 
             <div className="absolute left-4 bottom-4">
@@ -281,6 +274,8 @@ const HomePage: React.FC<HomePageProps> = ({ balance, user, onNavigateToTrading,
             </div>
           </div>
         </button>
+
+        <CryptoBannerWidget />
         {workerEvent && (
           <BottomSheet
             open={eventOpen}
@@ -324,13 +319,13 @@ const HomePage: React.FC<HomePageProps> = ({ balance, user, onNavigateToTrading,
       {/* Top assets */}
       <section className="pt-1">
         <div className="flex items-center justify-between mb-2">
-          <h2 className="text-sm font-semibold text-textPrimary">Top assets</h2>
+          <h2 className="text-sm font-semibold text-textPrimary">{t('home_top_assets')}</h2>
           <button
             type="button"
             onClick={() => { Haptic.tap(); onNavigate('COINS'); }}
             className="text-xs font-semibold text-neon"
           >
-            View all
+            {t('home_view_all')}
           </button>
         </div>
 

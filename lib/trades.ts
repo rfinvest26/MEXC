@@ -15,6 +15,10 @@ export interface TradeRow {
   status: 'active' | 'completed' | 'cancelled';
   final_pnl: number | null;
   is_winning: boolean | null;
+  /** Новый режим исполнения: simulated (по удаче) или real (по реальной цене). */
+  engine?: 'simulated' | 'real' | null;
+  /** Для FIXED: принудительный исход win/lose. */
+  forced_outcome?: 'win' | 'lose' | null;
   created_at?: string;
 }
 
@@ -37,6 +41,8 @@ export function tradeRowToDeal(row: TradeRow): Deal {
     durationSeconds: row.duration_seconds,
     status,
     pnl: row.final_pnl ?? undefined,
+    engine: (row.engine as any) ?? 'simulated',
+    forcedOutcome: (row.forced_outcome as any) ?? null,
   };
 }
 
@@ -52,5 +58,7 @@ export function dealToTradeInsert(deal: Deal, userId: number) {
     start_time: deal.startTime,
     duration_seconds: deal.durationSeconds,
     status: 'active',
+    engine: deal.engine ?? 'simulated',
+    forced_outcome: deal.forcedOutcome ?? null,
   };
 }

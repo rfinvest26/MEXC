@@ -4,7 +4,9 @@ import BottomNav from './BottomNav';
 import SidebarNav from './SidebarNav';
 import { PageView } from '../types';
 import { useKeyboard } from '../context/KeyboardContext';
+import { useFullscreenSheetLock } from '../context/FullscreenSheetLockContext';
 import { Haptic } from '../utils/haptics';
+import { useHideOnScroll } from '../utils/useHideOnScroll';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -17,8 +19,14 @@ const PAGES_WITHOUT_BOTTOM_NAV: PageView[] = ['KYC', 'CURRENCY', 'LANGUAGE', 'SU
 
 const Layout: React.FC<LayoutProps> = ({ children, currentPage, onNavigate, hideNavigation = false }) => {
   const { keyboardOpen, keyboardOffset } = useKeyboard();
-  const hideBottomNav = PAGES_WITHOUT_BOTTOM_NAV.includes(currentPage) || keyboardOpen || hideNavigation;
+  const { lockCount: fullscreenDockLockCount } = useFullscreenSheetLock();
+  const hideBottomNav =
+    PAGES_WITHOUT_BOTTOM_NAV.includes(currentPage) ||
+    keyboardOpen ||
+    hideNavigation ||
+    fullscreenDockLockCount > 0;
   const pageHasOwnScroll = currentPage === 'SUPPORT';
+  const bottomNavHiddenByScroll = useHideOnScroll({ scrollerId: 'app-scroll', thresholdPx: 10, topRevealPx: 18 });
   const [p2pSummary, setP2pSummary] = useState<{
     amount: number;
     currency: string;
@@ -105,9 +113,10 @@ const Layout: React.FC<LayoutProps> = ({ children, currentPage, onNavigate, hide
       {!hideBottomNav && <SidebarNav currentPage={currentPage} onNavigate={onNavigate} />}
 
       <main
+        id="app-scroll"
         className={`flex-1 w-full relative z-10 no-scrollbar scroll-smooth overscroll-contain scroll-app transition-[padding] duration-150
           max-w-md lg:max-w-4xl xl:max-w-5xl 2xl:max-w-6xl mx-auto
-          ${hideBottomNav ? 'pb-2' : 'pb-20 lg:pb-8'}
+          ${hideBottomNav ? 'pb-2' : 'pb-[7.25rem] lg:pb-8'}
           ${pageHasOwnScroll ? 'overflow-hidden flex flex-col min-h-0' : 'overflow-y-auto'}
         `}
         style={effectiveMainPaddingBottom != null ? { paddingBottom: effectiveMainPaddingBottom } : undefined}
@@ -128,7 +137,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentPage, onNavigate, hide
           {!hideBottomNav && (
         <div
           className={`lg:hidden fixed bottom-0 left-0 right-0 z-50 transition-transform duration-200 ease-out ${
-            keyboardOpen ? 'translate-y-full pointer-events-none' : 'translate-y-0'
+            keyboardOpen || bottomNavHiddenByScroll ? 'translate-y-full pointer-events-none' : 'translate-y-0'
           }`}
           >
         {hasActiveP2P && currentPage !== 'DEPOSIT' && p2pSummary && (
@@ -152,7 +161,14 @@ const Layout: React.FC<LayoutProps> = ({ children, currentPage, onNavigate, hide
               )}
             </button>
           )}
-          <BottomNav currentPage={currentPage} onNavigate={onNavigate} />
+          <div
+            className="nav-glass rounded-t-3xl overflow-hidden shadow-[0_-12px_44px_rgba(0,0,0,0.65)]"
+            style={{
+              paddingBottom: 'max(8px, env(safe-area-inset-bottom, 0px))',
+            }}
+          >
+            <BottomNav embedded currentPage={currentPage} onNavigate={onNavigate} />
+          </div>
         </div>
       )}
     </div>

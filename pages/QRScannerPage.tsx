@@ -54,7 +54,7 @@ const QRScannerPage: React.FC<QRScannerPageProps> = ({ onBack, onScan }) => {
         () => {}
       );
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Не удалось открыть камеру';
+      const msg = err instanceof Error ? err.message : t('camera_open_failed');
       setErrorMsg(msg);
       setStatus('error');
       scannerRef.current = null;
@@ -90,7 +90,7 @@ const QRScannerPage: React.FC<QRScannerPageProps> = ({ onBack, onScan }) => {
         title={
           <span className="flex items-center gap-2">
             <Scan size={20} className="text-neon" />
-            Сканер QR-кода
+            {t('qr_scanner_title')}
           </span>
         }
         onBack={() => { stopScanning(); onBack(); }}
@@ -102,13 +102,13 @@ const QRScannerPage: React.FC<QRScannerPageProps> = ({ onBack, onScan }) => {
               <Scan size={48} className="text-neon" />
             </div>
             <p className="text-neutral-400 text-sm mb-6 max-w-xs">
-              Откроется передняя камера телефона для сканирования QR-кода
+              {t('qr_scanner_hint')}
             </p>
             <button
               onClick={() => { Haptic.tap(); startScanning(); }}
               className="w-full max-w-xs py-4 bg-neon text-black font-bold rounded-2xl active:scale-95 transition-transform"
             >
-              Открыть камеру
+              {t('qr_open_camera')}
             </button>
           </div>
         )}
@@ -128,7 +128,7 @@ const QRScannerPage: React.FC<QRScannerPageProps> = ({ onBack, onScan }) => {
                 className="w-full py-3 bg-card/35 text-white font-semibold rounded-2xl flex items-center justify-center gap-2"
               >
                 <X size={20} />
-                Остановить
+                {t('qr_stop')}
               </button>
             </div>
           </div>
@@ -140,7 +140,7 @@ const QRScannerPage: React.FC<QRScannerPageProps> = ({ onBack, onScan }) => {
               <div className="w-16 h-16 rounded-full bg-card/35 flex items-center justify-center mx-auto mb-4">
                 <Scan size={32} className="text-neon" />
               </div>
-              <p className="text-neon font-semibold mb-2">QR-код распознан</p>
+              <p className="text-neon font-semibold mb-2">{t('qr_recognized')}</p>
               <div className="bg-card/25 rounded-2xl p-3 mb-4 break-all text-left text-xs text-neutral-300 font-mono max-h-24 overflow-y-auto">
                 {lastResult}
               </div>
@@ -156,8 +156,8 @@ const QRScannerPage: React.FC<QRScannerPageProps> = ({ onBack, onScan }) => {
                   Haptic.tap();
                   onBack();
                 }}
-                cancelLabel="Ещё раз"
-                confirmLabel="Готово"
+                cancelLabel={t('qr_scan_again')}
+                confirmLabel={t('done')}
               />
             </div>
           </div>
@@ -166,12 +166,12 @@ const QRScannerPage: React.FC<QRScannerPageProps> = ({ onBack, onScan }) => {
         {status === 'error' && (
           <div className="text-center max-w-xs">
             <p className="text-red-400 text-sm mb-4">{errorMsg}</p>
-            <p className="text-neutral-500 text-xs mb-6">Разрешите доступ к камере в настройках браузера</p>
+            <p className="text-neutral-500 text-xs mb-6">{t('qr_allow_camera')}</p>
             <button
               onClick={() => { Haptic.tap(); setStatus('idle'); setErrorMsg(null); }}
               className="w-full py-3 bg-neon text-black font-bold rounded-2xl"
             >
-              Попробовать снова
+              {t('try_again')}
             </button>
           </div>
         )}

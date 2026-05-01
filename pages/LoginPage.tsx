@@ -44,29 +44,29 @@ const LoginPage: React.FC<LoginPageProps> = ({ onBack, onSuccess, onGoRegister, 
     setPassError(null);
     const em = email.trim().toLowerCase();
     const pw = password;
-    if (!em) setEmailError('Введите email');
-    else if (!isValidEmail(em)) setEmailError('Email выглядит неверно (пример: name@gmail.com)');
-    if (!pw) setPassError('Введите пароль');
+    if (!em) setEmailError(t('auth_enter_email'));
+    else if (!isValidEmail(em)) setEmailError(t('auth_email_invalid'));
+    if (!pw) setPassError(t('auth_enter_password'));
     if (!em || !pw || !isValidEmail(em)) {
-      toast.show('Проверьте поля ввода', 'error');
+      toast.show(t('auth_check_fields'), 'error');
       return;
     }
     setLoading(true);
     try {
       const { ok, error } = await login(em, pw);
       if (ok) {
-        toast.show('Вход выполнен', 'success');
+        toast.show(t('login_btn'), 'success');
         onSuccess();
       } else {
-        const msg = error || 'Ошибка входа';
+        const msg = error || t('auth_error_login');
         toast.show(msg, 'error');
         setLoginError(msg);
         if (msg.toLowerCase().includes('парол')) {
-          setPassError('Неверный пароль. Проверьте Caps Lock и раскладку.');
+          setPassError(t('pin_wrong'));
         }
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Ошибка входа';
+      const msg = err instanceof Error ? err.message : t('auth_error_login');
       toast.show(msg, 'error');
       setLoginError(msg);
     } finally {
@@ -141,12 +141,12 @@ const LoginPage: React.FC<LoginPageProps> = ({ onBack, onSuccess, onGoRegister, 
                     setResending(true);
                     const res = await resendEmailConfirmation?.(email);
                     setResending(false);
-                    if (!res?.ok) toast.show(res?.error || 'Ошибка', 'error');
-                    else toast.show('Письмо отправлено', 'success');
+                    if (!res?.ok) toast.show(res?.error || t('error_generic'), 'error');
+                    else toast.show(t('auth_email_resent'), 'success');
                   }}
                   className="touch-target px-3 py-2 rounded-2xl bg-card/40 text-textPrimary hover:bg-card/55 active:scale-[0.99] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {resending ? 'Отправляем…' : 'Отправить письмо ещё раз'}
+                  {resending ? t('auth_resending') : t('auth_resend_email')}
                 </button>
               </div>
             </div>

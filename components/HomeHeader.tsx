@@ -38,19 +38,19 @@ const HomeHeader: React.FC<HomeHeaderProps> = ({ showBalanceTitle: _showBalanceT
               <User size={14} />
             </div>
           )}
-          <div className="hidden xs:flex flex-col items-start leading-tight gap-0.5">
-            <span className="text-xs font-semibold text-textSecondary tracking-tight">
+          <div className="hidden xs:flex flex-col items-start leading-tight gap-0">
+            <span className="text-[10px] font-semibold text-textMuted uppercase tracking-wider">
               {t('sellbit')}
             </span>
-            <span className="text-[13px] font-medium text-textPrimary truncate max-w-[120px]">
+            <span className="text-xs font-medium text-textPrimary truncate max-w-[120px]">
               {user?.full_name || user?.username || t('profile')}
             </span>
           </div>
         </button>
 
         <div className="flex-1 flex items-center justify-center min-w-0">
-          <div className="inline-flex items-baseline gap-1 rounded-full bg-surface px-3 py-1.5">
-            <span className="text-[15px] font-bold text-ink tabular-nums tracking-tight">
+          <div className="inline-flex items-baseline gap-1 rounded-full bg-surface px-2.5 py-1">
+            <span className="text-[13px] font-bold text-ink tabular-nums tracking-tight">
               {symbol}
               {formattedBalance}
             </span>
@@ -61,7 +61,7 @@ const HomeHeader: React.FC<HomeHeaderProps> = ({ showBalanceTitle: _showBalanceT
           onClick={() => { Haptic.tap(); onSearch?.(); }}
           className="touch-target h-11 w-11 rounded-full flex items-center justify-center hover:bg-card active:scale-[0.97] transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-neon/30 flex-shrink-0"
         >
-          <Search size={18} className="text-textSecondary" />
+          <Search size={17} strokeWidth={1.75} className="text-icon-muted" />
         </button>
       </div>
     </header>

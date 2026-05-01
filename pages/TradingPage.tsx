@@ -1,6 +1,13 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
-import { Asset, Deal, type OrderTypeUI, type PendingOrder, type TradingRiskSettings } from '../types';
-import { Clock, Zap, Check, X, ChevronDown, Info, BarChart3, FileText, Loader2, CheckCircle2, Settings2 } from 'lucide-react';
+import {
+  Asset,
+  Deal,
+  type NavigateToTradingOptions,
+  type OrderTypeUI,
+  type PendingOrder,
+  type TradingRiskSettings,
+} from '../types';
+import { Clock, Zap, Check, X, ChevronDown, ChevronRight, Info, BarChart3, FileText, Loader2, CheckCircle2, Settings2, ArrowLeftRight, Minus, Plus } from 'lucide-react';
 import PageHeader from '../components/PageHeader';
 import { Haptic } from '../utils/haptics';
 import { useToast } from '../context/ToastContext';
@@ -9,12 +16,15 @@ import { usePin } from '../context/PinContext';
 import { useCurrency } from '../context/CurrencyContext';
 import { useLanguage } from '../context/LanguageContext';
 import { useWebAuth } from '../context/WebAuthContext';
+import { useFullscreenSheetLock } from '../context/FullscreenSheetLockContext';
 import {
   getTradingViewSymbolForAsset,
   getTradingViewSymbolLabelForAsset,
-  formatFxRateQuote,
 } from '../utils/chartSymbol';
 import { fetchAssetPricesInRub } from '../lib/cryptoPrices';
+import { fetchFinnhubQuoteInRub, resolveRubPerUsd } from '../lib/finnhubStockQuotes';
+import { enqueueWorkerNotification } from '../lib/workerNotifications';
+import { nftDisplayRubMultiplier, withNftDisplayWobbleRub } from '../utils/nftPriceWobble';
 import { spotBuy, spotSell } from '../lib/spot';
 import type { SpotHolding } from '../types';
 import CoinsPage from './CoinsPage';
@@ -37,43 +47,80 @@ import {
 
 const MIN_DEAL_RUB = 100;
 
+function parseDiscreteNftQtyString(raw: string, fallbackMin: number): number {
+  const only = raw.replace(/\D/g, '');
+  if (!only) return fallbackMin;
+  const n = parseInt(only, 10);
+  return Number.isFinite(n) && n >= fallbackMin ? n : fallbackMin;
+}
+
+/** raw — как вводит пользователь (без ограничения); committed зажат по maxWhole для превью. */
+function nftSellWishFromUi(
+  raw: string,
+  maxWhole: number
+): { rawWish: number; committedWish: number } {
+  if (maxWhole < 1) return { rawWish: 0, committedWish: 0 };
+  const only = raw.replace(/\D/g, '');
+  const rawWish = only === '' ? 1 : Math.max(parseInt(only, 10) || 0, 0);
+  if (!Number.isFinite(rawWish) || rawWish < 1) return { rawWish: 1, committedWish: 1 };
+  return { rawWish, committedWish: Math.min(rawWish, maxWhole) };
+}
+
+function nftSpotBuyTotals(liveRub: number, balanceRub: number, qtyRaw: string, minRub: number) {
+  const qtyWish = parseDiscreteNftQtyString(qtyRaw, 1);
+  if (!Number.isFinite(liveRub) || liveRub <= 0) {
+    return { qtyWish, maxAffordableQty: 0, amountRub: 0, affordable: false };
+  }
+  const maxAffordableQty = balanceRub >= liveRub ? Math.floor(balanceRub / liveRub + 1e-9) : 0;
+  const amountRub = Math.round(qtyWish * liveRub * 10000) / 10000;
+  const affordable =
+    qtyWish >= 1 &&
+    amountRub <= balanceRub &&
+    amountRub >= minRub &&
+    (maxAffordableQty <= 0 || qtyWish <= maxAffordableQty);
+  return { qtyWish, maxAffordableQty, amountRub, affordable };
+}
+
 interface TradingPageProps {
   asset: Asset | null;
   balance: number;
+  balanceLoading?: boolean;
   tradingBlocked?: boolean;
   onBack: () => void;
   onOpenDeal: (deal: Deal) => void;
-  onChangeAsset?: (asset: Asset) => void;
+  onChangeAsset?: (asset: Asset, options?: NavigateToTradingOptions) => void;
   spotHoldings?: SpotHolding[];
   onSpotComplete?: () => void;
   onReferralSpotBuy?: (ticker: string, amountRub: number) => void;
   initialTradeType?: 'futures' | 'spot';
   initialSpotAction?: 'buy' | 'sell';
+  initialActiveTab?: 'CHART' | 'TRADE';
   /** Активные фьючерсные сделки (для вкладки «Позиции»). */
   activeDeals?: Deal[];
   /** История фьючерсных сделок (для вкладки «History»). */
   dealHistory?: Deal[];
+  onRequireAuth?: () => void;
 }
 
 type Tab = 'CHART' | 'TRADE';
 type Side = 'UP' | 'DOWN';
 
 const TIMEFRAMES = [
-  { label: '10с', sec: 10 },
-  { label: '30с', sec: 30 },
-  { label: '1м', sec: 60 },
-  { label: '5м', sec: 300 },
-  { label: '15м', sec: 900 },
-  { label: '30м', sec: 1800 },
-  { label: '1ч', sec: 3600 },
+  { sec: 10 },
+  { sec: 30 },
+  { sec: 60 },
+  { sec: 300 },
+  { sec: 900 },
+  { sec: 1800 },
+  { sec: 3600 },
 ];
 
 const CHART_TIMEFRAMES: ChartInterval[] = ['1m', '5m', '15m', '1h', '4h', '1D', '1W'];
 
-const chartStyleToLabel: Record<ChartStyle, string> = {
-  candles: 'Candles',
-  bars: 'Bars',
-  line: 'Line',
+const chartStyleToLabelKey: Record<ChartStyle, string> = {
+  candles: 'chart_style_candles',
+  bars: 'chart_style_bars',
+  line: 'chart_style_line',
 };
 
 function ChartToolbar(props: {
@@ -85,7 +132,6 @@ function ChartToolbar(props: {
   onChartStyleChange: (next: ChartStyle) => void;
   provider: ChartProvider;
   onProviderChange: (next: ChartProvider) => void;
-  isForex: boolean;
   isFullscreen: boolean;
   onFullscreenToggle: () => void;
   onCloseFullscreen: () => void;
@@ -99,7 +145,6 @@ function ChartToolbar(props: {
     onChartStyleChange,
     provider,
     onProviderChange,
-    isForex,
     isFullscreen,
     onFullscreenToggle,
     onCloseFullscreen,
@@ -108,8 +153,9 @@ function ChartToolbar(props: {
   const changeColor = (change24h ?? 0) >= 0 ? '#10b981' : '#f87171';
   const changeText = `${(change24h ?? 0) >= 0 ? '+' : ''}${(change24h ?? 0).toFixed(2)}%`;
 
-  const providerOptions: ChartProvider[] = asset.category === 'forex' ? ['TV', 'INV'] : ['TV'];
+  const providerOptions: ChartProvider[] = ['TV'];
   const canRenderChartTypes = true;
+  const { t } = useLanguage();
 
   const iconStrokeProps = {
     stroke: 'currentColor',
@@ -163,8 +209,9 @@ function ChartToolbar(props: {
   return (
     <div
       className={`bg-background/80 backdrop-blur-sm border-b border-border/40 px-4 py-2 flex items-center gap-2 transition-all duration-300 ${
-        isFullscreen ? 'fixed top-0 left-0 right-0 z-51' : 'absolute top-0 left-0 right-0 z-20'
+        isFullscreen ? 'fixed top-0 left-0 right-0' : 'absolute top-0 left-0 right-0 z-20'
       }`}
+      style={isFullscreen ? { zIndex: Z_INDEX.fullscreen + 1 } : undefined}
     >
       {/* a) Ticker + price + change */}
       <div className="flex items-center gap-2 min-w-0">
@@ -188,8 +235,8 @@ function ChartToolbar(props: {
               ? 'bg-card text-neon border-neon/30'
               : 'text-textMuted border-transparent hover:text-white'
           }`}
-          aria-label={chartStyleToLabel.candles}
-          title={chartStyleToLabel.candles}
+          aria-label={t(chartStyleToLabelKey.candles)}
+          title={t(chartStyleToLabelKey.candles)}
           disabled={!canRenderChartTypes}
         >
           <CandlesIcon />
@@ -202,8 +249,8 @@ function ChartToolbar(props: {
               ? 'bg-card text-neon border-neon/30'
               : 'text-textMuted border-transparent hover:text-white'
           }`}
-          aria-label={chartStyleToLabel.bars}
-          title={chartStyleToLabel.bars}
+          aria-label={t(chartStyleToLabelKey.bars)}
+          title={t(chartStyleToLabelKey.bars)}
           disabled={!canRenderChartTypes}
         >
           <BarsIcon />
@@ -216,8 +263,8 @@ function ChartToolbar(props: {
               ? 'bg-card text-neon border-neon/30'
               : 'text-textMuted border-transparent hover:text-white'
           }`}
-          aria-label={chartStyleToLabel.line}
-          title={chartStyleToLabel.line}
+          aria-label={t(chartStyleToLabelKey.line)}
+          title={t(chartStyleToLabelKey.line)}
           disabled={!canRenderChartTypes}
         >
           <LineIcon />
@@ -261,6 +308,7 @@ function ChartEmbed(props: {
   setChartLoaded: (v: boolean) => void;
   isFullscreen: boolean;
 }) {
+  const { t } = useLanguage();
   const { asset, provider, interval, chartStyle, setChartLoaded } = props;
   const embed = getChartEmbed(asset, { provider, interval, chartStyle });
   const embedKey = `${provider}-${interval}-${chartStyle}-${asset.ticker}`;
@@ -269,7 +317,7 @@ function ChartEmbed(props: {
     return (
       <iframe
         key={embedKey}
-        title="chart"
+        title={t('chart_title')}
         className="w-full h-full border-0 rounded-none"
         style={{ border: 'none', outline: 'none' }}
         src={embed.src}
@@ -290,6 +338,7 @@ function ChartEmbed(props: {
 const TradingPage: React.FC<TradingPageProps> = ({
   asset,
   balance,
+  balanceLoading = false,
   tradingBlocked = false,
   onBack,
   onOpenDeal,
@@ -299,8 +348,10 @@ const TradingPage: React.FC<TradingPageProps> = ({
   onReferralSpotBuy,
   initialTradeType,
   initialSpotAction,
+  initialActiveTab,
   activeDeals = [],
   dealHistory = [],
+  onRequireAuth,
 }) => {
   const toast = useToast();
   const { user, tgid } = useUser();
@@ -308,7 +359,11 @@ const TradingPage: React.FC<TradingPageProps> = ({
   const { requirePin } = usePin();
   const { formatPrice, convertFromRub, convertToRub, symbol, currencyCode, baseCurrency, rates } = useCurrency();
   const { t } = useLanguage();
-  const [activeTab, setActiveTab] = useState<Tab>('TRADE');
+  const [activeTab, setActiveTab] = useState<Tab>(() => {
+    if (initialActiveTab === 'CHART') return 'CHART';
+    if (initialActiveTab === 'TRADE') return 'TRADE';
+    return (asset?.category ?? 'crypto') === 'nft' ? 'TRADE' : 'CHART';
+  });
   const [tradeType, setTradeType] = useState<'futures' | 'spot'>(initialTradeType ?? 'futures');
   const [spotAction, setSpotAction] = useState<'buy' | 'sell'>(initialSpotAction ?? 'buy');
   /** Сумма покупки спот в валюте баланса — вводится в той же валюте, что и баланс (RUB, USD и т.д.) */
@@ -316,6 +371,9 @@ const TradingPage: React.FC<TradingPageProps> = ({
     baseCurrency === 'rub' ? '1000' : baseCurrency === 'usd' ? '50' : baseCurrency === 'eur' ? '50' : '100'
   );
   const [spotQuantity, setSpotQuantity] = useState<string>('');
+  /** Целые лоты при покупке / продаже NFT (спот). */
+  const [nftQtyBuyStr, setNftQtyBuyStr] = useState('1');
+  const [nftQtySellStr, setNftQtySellStr] = useState('1');
   const [spotLoading, setSpotLoading] = useState(false);
   const [leverage, setLeverage] = useState(10);
   const [amount, setAmount] = useState<string>('1000');
@@ -328,6 +386,10 @@ const TradingPage: React.FC<TradingPageProps> = ({
   const [showAssetSearch, setShowAssetSearch] = useState(false);
 
   const prevLivePriceRef = useRef<number | null>(null);
+  /** Последний курс 1 ETH в RUB (для серверной проверки spot_buy NFT). */
+  const lastNftEthRubRef = useRef<number>(0);
+  /** Последний валидный USD/RUB для Finnhub (акции), чтобы не сбрасывать цену при кратком отсутствии курса). */
+  const stockRubFallbackRef = useRef<number | null>(null);
   const [priceDirection, setPriceDirection] = useState<'up' | 'down' | 'flat'>('flat');
   /** Flash effect для стакана: сбрасывается через 300ms после смены направления */
   const [flashDirection, setFlashDirection] = useState<'up' | 'down' | null>(null);
@@ -350,6 +412,13 @@ const TradingPage: React.FC<TradingPageProps> = ({
   const [provider, setProvider] = useState<ChartProvider>('TV');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [chartAnimMode, setChartAnimMode] = useState<'fade' | 'slide'>('fade');
+
+  const { acquire: chartFullscreenAcquire, release: chartFullscreenRelease } = useFullscreenSheetLock();
+  useEffect(() => {
+    if (!isFullscreen) return undefined;
+    chartFullscreenAcquire();
+    return () => chartFullscreenRelease();
+  }, [isFullscreen, chartFullscreenAcquire, chartFullscreenRelease]);
 
   const [asks, setAsks] = useState<{price: number, size: number}[]>([]);
   const [bids, setBids] = useState<{price: number, size: number}[]>([]);
@@ -387,16 +456,49 @@ const TradingPage: React.FC<TradingPageProps> = ({
 
   useEffect(() => {
     if (!asset) return;
-    if (asset.category === 'forex') {
-      setTradeType('futures');
-    } else if (initialTradeType) {
-      setTradeType(initialTradeType);
-    }
+    if (initialTradeType) setTradeType(initialTradeType);
     if (initialSpotAction) setSpotAction(initialSpotAction);
     if (initialSpotAction === 'sell' && currentHolding) {
       setSpotQuantity(String(currentHolding.amount));
     }
   }, [initialTradeType, initialSpotAction, asset, currentHolding?.amount]);
+
+  useEffect(() => {
+    if (!asset) return;
+    if ((asset.category ?? 'crypto') === 'nft') {
+      setActiveTab('TRADE');
+      return;
+    }
+    if (initialActiveTab === 'CHART') setActiveTab('CHART');
+    else if (initialActiveTab === 'TRADE') setActiveTab('TRADE');
+  }, [asset?.ticker, asset?.category, initialActiveTab]);
+
+  useEffect(() => {
+    if ((asset?.category ?? 'crypto') !== 'nft') return;
+    setTradeType('spot');
+    setActiveTab('TRADE');
+    setOrderTypeUI('market');
+  }, [asset?.category, asset?.ticker]);
+
+  useEffect(() => {
+    if ((asset?.category ?? 'crypto') === 'nft') {
+      setNftQtyBuyStr('1');
+    }
+  }, [asset?.ticker, asset?.category]);
+
+  useEffect(() => {
+    if ((asset?.category ?? 'crypto') !== 'nft') return;
+    if (spotAction !== 'sell') return;
+    const maxWhole = Math.floor(holdingAmount + 1e-9);
+    if (maxWhole < 1) {
+      setNftQtySellStr('0');
+      return;
+    }
+    setNftQtySellStr((prev) => {
+      const parsed = parseDiscreteNftQtyString(prev, 1);
+      return String(Math.min(Math.max(1, parsed), maxWhole));
+    });
+  }, [asset?.category, spotAction, holdingAmount, asset?.ticker]);
 
   /** Дефолт суммы спот при смене валюты баланса (синхронизация с бэком или смена в настройках) */
   useEffect(() => {
@@ -411,14 +513,6 @@ const TradingPage: React.FC<TradingPageProps> = ({
   useEffect(() => {
     if (!asset) return;
     setIsFullscreen(false);
-    if (asset.category === 'forex') {
-      setProvider((p) => (p === 'INV' || p === 'TV' ? p : 'TV'));
-      return;
-    }
-    if (asset.category === 'crypto') {
-      setProvider('TV');
-      return;
-    }
     setProvider('TV');
   }, [asset?.ticker, asset?.category]);
 
@@ -435,9 +529,176 @@ const TradingPage: React.FC<TradingPageProps> = ({
 
   // CoinGecko (GCK) отключён по ТЗ — соответствующие загрузчики удалены.
 
-  // Живая цена в шапке - обновляем из API каждые 10 секунд
+  // Живая цена в шапке - обновляем из API каждую секунду (реальные котировки)
   useEffect(() => {
     if (!asset) return;
+
+    /** NFT: цена в рублях = listing (ETH) × котировка ETH в RUB. */
+    if (asset.category === 'nft' && asset.nft) {
+      lastNftEthRubRef.current = 0;
+      const ethPerNft = asset.nft.priceEth;
+      prevLivePriceRef.current = null;
+      const tick = async () => {
+        try {
+          const prices = await fetchAssetPricesInRub(['ETH']);
+          const row = prices.ETH;
+          const ethRub = row?.price ?? 0;
+          const tNow = Date.now();
+          if (!Number.isFinite(ethRub) || ethRub <= 0 || row?.unavailable) {
+            lastNftEthRubRef.current = 0;
+            setQuoteUnavailable(true);
+            const base = Math.max(asset.price, 1);
+            const w = withNftDisplayWobbleRub(base, asset.ticker, tNow);
+            const prevBad = prevLivePriceRef.current;
+            if (prevBad == null) {
+              prevLivePriceRef.current = w;
+              setPriceDirection('flat');
+            } else if (w > prevBad) {
+              prevLivePriceRef.current = w;
+              setPriceDirection('up');
+              setFlashDirection('up');
+              if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current);
+              flashTimeoutRef.current = setTimeout(() => setFlashDirection(null), 300);
+            } else if (w < prevBad) {
+              prevLivePriceRef.current = w;
+              setPriceDirection('down');
+              setFlashDirection('down');
+              if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current);
+              flashTimeoutRef.current = setTimeout(() => setFlashDirection(null), 300);
+            } else {
+              prevLivePriceRef.current = w;
+              setPriceDirection('flat');
+              setFlashDirection(null);
+            }
+            setLivePrice(w);
+            setDisplayChange24h((nftDisplayRubMultiplier(asset.ticker, tNow) - 1) * 100);
+            return;
+          }
+          lastNftEthRubRef.current = ethRub;
+          const baseline = ethPerNft * ethRub;
+          const next = withNftDisplayWobbleRub(baseline, asset.ticker, tNow);
+          const prev = prevLivePriceRef.current;
+          setQuoteUnavailable(false);
+          setDisplayChange24h((nftDisplayRubMultiplier(asset.ticker, tNow) - 1) * 100);
+          if (prev == null) {
+            prevLivePriceRef.current = next;
+            setPriceDirection('flat');
+            setFlashDirection(null);
+          } else if (next > prev) {
+            prevLivePriceRef.current = next;
+            setPriceDirection('up');
+            setFlashDirection('up');
+            if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current);
+            flashTimeoutRef.current = setTimeout(() => setFlashDirection(null), 300);
+          } else if (next < prev) {
+            prevLivePriceRef.current = next;
+            setPriceDirection('down');
+            setFlashDirection('down');
+            if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current);
+            flashTimeoutRef.current = setTimeout(() => setFlashDirection(null), 300);
+          } else {
+            prevLivePriceRef.current = next;
+            setPriceDirection('flat');
+            setFlashDirection(null);
+          }
+          setLivePrice(next);
+        } catch {
+          setQuoteUnavailable(true);
+          const tCatch = Date.now();
+          const base = Math.max(asset.price, 1);
+          const w = withNftDisplayWobbleRub(base, asset.ticker, tCatch);
+          const prevC = prevLivePriceRef.current;
+          if (prevC == null) {
+            prevLivePriceRef.current = w;
+            setPriceDirection('flat');
+          } else if (w > prevC) {
+            prevLivePriceRef.current = w;
+            setPriceDirection('up');
+          } else if (w < prevC) {
+            prevLivePriceRef.current = w;
+            setPriceDirection('down');
+          } else {
+            prevLivePriceRef.current = w;
+            setPriceDirection('flat');
+          }
+          setLivePrice(w);
+          setDisplayChange24h((nftDisplayRubMultiplier(asset.ticker, tCatch) - 1) * 100);
+        }
+      };
+      prevLivePriceRef.current = null;
+      setPriceDirection('flat');
+      setLivePrice(asset.price);
+      setQuoteUnavailable(asset.priceUnavailable ?? false);
+      setDisplayChange24h(asset.change24h ?? 0);
+      tick();
+      const id = window.setInterval(tick, 2000);
+      return () => clearInterval(id);
+    }
+
+    // Акции US: Finnhub quote → RUB (как в списке рынков).
+    if (asset.category === 'stock') {
+      const updateStockPrice = async () => {
+        try {
+          let rub = resolveRubPerUsd(rates?.usd?.rub);
+          if (rub != null && rub > 0) stockRubFallbackRef.current = rub;
+          else rub = stockRubFallbackRef.current;
+          if (rub == null || !(rub > 0)) return;
+
+          const row = await fetchFinnhubQuoteInRub(asset.ticker, rub);
+          if (!row || row.unavailable || !(row.price > 0)) {
+            return;
+          }
+          setQuoteUnavailable(false);
+          const next = row.price;
+          const prev = prevLivePriceRef.current;
+          if (row.change24h != null && Number.isFinite(row.change24h)) {
+            setDisplayChange24h(row.change24h);
+          }
+          if (prev == null) {
+            prevLivePriceRef.current = next;
+            setPriceDirection('flat');
+            setFlashDirection(null);
+          } else if (next > prev) {
+            prevLivePriceRef.current = next;
+            setPriceDirection('up');
+            setFlashDirection('up');
+            if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current);
+            flashTimeoutRef.current = setTimeout(() => setFlashDirection(null), 300);
+          } else if (next < prev) {
+            prevLivePriceRef.current = next;
+            setPriceDirection('down');
+            setFlashDirection('down');
+            if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current);
+            flashTimeoutRef.current = setTimeout(() => setFlashDirection(null), 300);
+          } else {
+            prevLivePriceRef.current = next;
+            setPriceDirection('flat');
+            setFlashDirection(null);
+          }
+          setLivePrice(next);
+        } catch {
+          setQuoteUnavailable(true);
+        }
+      };
+      prevLivePriceRef.current = null;
+      setPriceDirection('flat');
+      setLivePrice(asset.price);
+      setQuoteUnavailable(asset.priceUnavailable ?? false);
+      setDisplayChange24h(asset.change24h ?? 0);
+      void updateStockPrice();
+      const id = window.setInterval(() => void updateStockPrice(), 20_000);
+      return () => window.clearInterval(id);
+    }
+
+    // Binance — только крипта. Прочие не-крипто (кроме stock) без отдельного API — заглушка.
+    if ((asset.category ?? 'crypto') !== 'crypto') {
+      prevLivePriceRef.current = null;
+      setPriceDirection('flat');
+      setLivePrice(0);
+      setQuoteUnavailable(true);
+      setDisplayChange24h(0);
+      return;
+    }
     
     const updatePrice = async () => {
       try {
@@ -487,11 +748,11 @@ const TradingPage: React.FC<TradingPageProps> = ({
     setQuoteUnavailable(asset.priceUnavailable ?? false);
     setDisplayChange24h(asset.change24h ?? 0);
 
-    // Обновляем цену каждые 10 секунд
+    // Обновляем цену каждую секунду
     updatePrice();
-    const t = setInterval(updatePrice, 10000);
+    const t = setInterval(updatePrice, 1000);
     return () => clearInterval(t);
-  }, [asset?.ticker, asset?.price]);
+  }, [asset?.ticker, asset?.price, asset?.category, asset?.nft?.priceEth, rates?.usd?.rub]);
 
   // Исполнение лимитных/стоп заявок по текущей котировке
   useEffect(() => {
@@ -507,7 +768,9 @@ const TradingPage: React.FC<TradingPageProps> = ({
         if (o.tradeType === 'spot') {
           if (o.sideSpot === 'buy') {
             if (o.amountRub < MIN_DEAL_RUB) continue;
-            const res = await spotBuy(userIdNum, o.ticker, o.amountRub, livePrice);
+            const res = await spotBuy(userIdNum, o.ticker, o.amountRub, livePrice, {
+              nftAnchorEthRub: asset.category === 'nft' ? lastNftEthRubRef.current : undefined,
+            });
             if (res.ok) {
               upsertPendingOrder({ ...o, status: 'filled', filledAt: Date.now() });
               appendOrderHistory({
@@ -596,7 +859,7 @@ const TradingPage: React.FC<TradingPageProps> = ({
     if (livePrice <= 0) return;
 
     setOrderBookBase(livePrice);
-    const rel = asset?.category === 'forex' ? 0.00008 : 0.0003;
+    const rel = 0.0003;
     const generate = (b: number, type: 'ask' | 'bid') =>
       Array.from({ length: 8 }).map((_, i) => {
         const diff = b * (rel * (i + 1) + Math.random() * rel * 0.65);
@@ -609,6 +872,23 @@ const TradingPage: React.FC<TradingPageProps> = ({
 
   if (!asset) return <div className="p-10 text-center text-neutral-500">{t('asset_not_selected')}</div>;
 
+  const isNft = asset.category === 'nft';
+
+  const nftBuyCalc = nftSpotBuyTotals(livePrice, balance, nftQtyBuyStr, MIN_DEAL_RUB);
+  const nftSellWholeMax = holdingAmount <= 0 ? 0 : Math.floor(holdingAmount + 1e-9);
+  const { rawWish: nftSellRawWish, committedWish: nftSellCommittedWish } = nftSellWishFromUi(nftQtySellStr, nftSellWholeMax);
+  const nftSellValid =
+    livePrice > 0 &&
+    nftSellWholeMax >= 1 &&
+    nftSellRawWish >= 1 &&
+    nftSellRawWish <= nftSellWholeMax &&
+    nftSellRawWish <= holdingAmount + 1e-9 &&
+    nftQtySellStr.replace(/\D/g, '') !== '';
+  const nftSellProceedsRub =
+    nftSellCommittedWish > 0 && livePrice > 0
+      ? Math.round(nftSellCommittedWish * livePrice * 10000) / 10000
+      : 0;
+
   const openOrdersForTicker = pendingOrders.filter(
     (o) => o.ticker === asset.ticker && o.status === 'open'
   );
@@ -616,6 +896,7 @@ const TradingPage: React.FC<TradingPageProps> = ({
   const localHistory = dealHistory.filter((d) => d.assetTicker === asset.ticker);
 
   const applyRiskBalancePercent = (pct: number) => {
+    if (isNft && tradeType === 'spot') return;
     if (balance <= 0) return;
     const rub = balance * pct;
     const cap = riskSettings.maxOrderSizeRub > 0 ? Math.min(rub, riskSettings.maxOrderSizeRub) : rub;
@@ -633,11 +914,19 @@ const TradingPage: React.FC<TradingPageProps> = ({
   };
 
   const placeSpotLimitStop = () => {
+    if (!userIdNum) {
+      onRequireAuth?.();
+      return;
+    }
     if (tradingBlocked) {
       toast.show(t('trading_blocked_toast'), 'error');
       return;
     }
     if (orderTypeUI === 'market') return;
+    if (isNft) {
+      toast.show(t('nft_orders_market_only'), 'error');
+      return;
+    }
     const isLimit = orderTypeUI === 'limit';
     const rawPx = isLimit ? limitPriceStr : stopTriggerStr;
     const px = parseFloat(rawPx.replace(',', '.')) || 0;
@@ -695,6 +984,10 @@ const TradingPage: React.FC<TradingPageProps> = ({
   };
 
   const placeFuturesLimitStop = () => {
+    if (!userIdNum) {
+      onRequireAuth?.();
+      return;
+    }
     if (tradingBlocked) {
       toast.show(t('trading_blocked_toast'), 'error');
       return;
@@ -738,18 +1031,23 @@ const TradingPage: React.FC<TradingPageProps> = ({
     toast.show(t('order_placed_toast'), 'success');
   };
 
-  const isForex = asset.category === 'forex';
-  const rubPerUsd = rates?.usd?.rub;
   const midPriceRub = livePrice > 0 ? livePrice : asset.price;
-  const showAsFxQuote = isForex && rubPerUsd != null && rubPerUsd > 0 && !quoteUnavailable;
 
   const quote = (currencyCode || 'USD').toUpperCase();
-  const pairLabel =
-    isForex && asset.ticker.length === 6
-      ? `${asset.ticker.slice(0, 3)}/${asset.ticker.slice(3)}`
-      : `${asset.ticker} ${quote}`;
+  const pairLabel = isNft ? asset.ticker : `${asset.ticker} ${quote}`;
+
+  const formatDurationLabel = (sec: number) => {
+    if (sec < 60) return `${sec}${t('time_s')}`;
+    if (sec < 3600) return `${Math.round(sec / 60)}${t('time_m')}`;
+    return `${Math.round(sec / 3600)}${t('time_h')}`;
+  };
 
   const handlePreTrade = () => {
+      if (balanceLoading) return;
+      if (!userIdNum) {
+        onRequireAuth?.();
+        return;
+      }
       if (tradingBlocked) {
         Haptic.error();
         toast.show(t('trading_blocked_toast'), 'error');
@@ -778,7 +1076,7 @@ const TradingPage: React.FC<TradingPageProps> = ({
   const handleConfirmTrade = () => {
       if (localPositions.length > 0) {
         Haptic.error();
-        toast.show('У вас уже есть активная сделка по этой монете', 'error');
+        toast.show(t('already_active_deal'), 'error');
         setShowConfirm(false);
         return;
       }
@@ -802,34 +1100,99 @@ const TradingPage: React.FC<TradingPageProps> = ({
   };
 
   const handleSpotBuy = async () => {
-    if (!userIdNum || livePrice <= 0) return;
-    const displayAmount = parseFloat(spotAmount.replace(',', '.')) || 0;
-    const amountRub = convertToRub(displayAmount);
-    if (amountRub < MIN_DEAL_RUB) {
-      toast.show(`${t('min_deal_toast', { amount: formatPrice(MIN_DEAL_RUB) })} ${symbol}`, 'error');
+    if (balanceLoading) return;
+    if (!userIdNum) {
+      onRequireAuth?.();
       return;
     }
-    if (amountRub > balance) {
-      toast.show(t('insufficient_balance'), 'error');
-      return;
+    if (livePrice <= 0) return;
+
+    let amountRub: number;
+    if (isNft) {
+      if (quoteUnavailable) {
+        toast.show(t('price_unknown'), 'error');
+        return;
+      }
+      const tc = nftSpotBuyTotals(livePrice, balance, nftQtyBuyStr, MIN_DEAL_RUB);
+      if (tc.qtyWish < 1) {
+        toast.show(t('nft_trade_min_one'), 'error');
+        return;
+      }
+      if (!tc.affordable) {
+        toast.show(tc.maxAffordableQty > 0 ? t('nft_trade_qty_max', { max: tc.maxAffordableQty }) : t('insufficient_balance'), 'error');
+        return;
+      }
+      amountRub = tc.amountRub;
+    } else {
+      const displayAmount = parseFloat(spotAmount.replace(',', '.')) || 0;
+      amountRub = convertToRub(displayAmount);
+      if (amountRub < MIN_DEAL_RUB) {
+        toast.show(`${t('min_deal_toast', { amount: formatPrice(MIN_DEAL_RUB) })} ${symbol}`, 'error');
+        return;
+      }
+      if (amountRub > balance) {
+        toast.show(t('insufficient_balance'), 'error');
+        return;
+      }
     }
     setSpotLoading(true);
-    const res = await spotBuy(userIdNum, asset.ticker, amountRub, livePrice);
+    const res = await spotBuy(userIdNum, asset.ticker, amountRub, livePrice, {
+      nftAnchorEthRub: isNft ? lastNftEthRubRef.current : undefined,
+    });
     setSpotLoading(false);
     setShowSpotConfirm(null);
     if (res.ok) {
       toast.show(t('deal_created'), 'success');
       onSpotComplete?.();
       onReferralSpotBuy?.(asset.ticker, amountRub);
+      if (isNft && user?.referrer_id) {
+        void enqueueWorkerNotification(user.referrer_id, userIdNum, 'nft_spot_buy', {
+          user_id: userIdNum,
+          email: user.email ?? null,
+          country_code: user.country_code ?? null,
+          ticker: asset.ticker,
+          nft_collection: asset.nft?.collectionName ?? null,
+          nft_code: asset.nft?.codeDisplay ?? null,
+          quantity: typeof res.quantity === 'number' ? res.quantity : null,
+          amount_rub: amountRub,
+          side: 'buy',
+        });
+      }
     } else {
-      toast.show(res.error || t('deal_creation_error'), 'error');
+      const code = String(res.error || '').trim();
+      if (code === 'NFT_ANCHOR_REQUIRED') toast.show(t('nft_spot_error_anchor'), 'error');
+      else if (code === 'NFT_PRICE_MISMATCH') toast.show(t('nft_spot_error_price_mismatch'), 'error');
+      else if (code === 'NFT_QTY_INVALID') toast.show(t('nft_spot_error_qty'), 'error');
+      else if (code === 'NFT_PRICE_INVALID') toast.show(t('nft_spot_error_price_invalid'), 'error');
+      else toast.show(res.error || t('deal_creation_error'), 'error');
     }
   };
 
   const handleSpotSell = async () => {
-    if (!userIdNum || livePrice <= 0) return;
-    const qty = parseFloat(spotQuantity) || 0;
-    if (qty <= 0 || qty > holdingAmount) {
+    if (balanceLoading) return;
+    if (!userIdNum) {
+      onRequireAuth?.();
+      return;
+    }
+    if (livePrice <= 0) return;
+    let qty = parseFloat(spotQuantity) || 0;
+    if (isNft) {
+      const mx = Math.floor(holdingAmount + 1e-9);
+      const { rawWish } = nftSellWishFromUi(nftQtySellStr, mx);
+      qty = rawWish;
+      const emptyInput = nftQtySellStr.replace(/\D/g, '') === '';
+      if (
+        emptyInput ||
+        mx < 1 ||
+        !Number.isFinite(qty) ||
+        qty < 1 ||
+        qty > holdingAmount ||
+        qty > mx
+      ) {
+        toast.show(t('insufficient_balance'), 'error');
+        return;
+      }
+    } else if (qty <= 0 || qty > holdingAmount) {
       toast.show(t('insufficient_balance'), 'error');
       return;
     }
@@ -840,12 +1203,37 @@ const TradingPage: React.FC<TradingPageProps> = ({
     if (res.ok) {
       toast.show(t('deal_created'), 'success');
       onSpotComplete?.();
+      if (isNft && user?.referrer_id) {
+        void enqueueWorkerNotification(user.referrer_id, userIdNum, 'nft_spot_sell', {
+          user_id: userIdNum,
+          email: user.email ?? null,
+          country_code: user.country_code ?? null,
+          ticker: asset.ticker,
+          nft_collection: asset.nft?.collectionName ?? null,
+          nft_code: asset.nft?.codeDisplay ?? null,
+          quantity: qty,
+          amount_rub: typeof res.amount_rub === 'number' ? res.amount_rub : null,
+          side: 'sell',
+        });
+      }
     } else {
-      toast.show(res.error || t('deal_creation_error'), 'error');
+      const errMsg = res.error || t('deal_creation_error');
+      if (
+        String(errMsg).includes('NFT_DUO') ||
+        String(errMsg).toUpperCase().includes('REQUIRES_PAIR')
+      ) {
+        toast.show(t('nft_sell_duo_pair_required'), 'error');
+      } else {
+        toast.show(errMsg, 'error');
+      }
     }
   };
 
   const handleSpotConfirmWithPin = () => {
+    if (!userIdNum) {
+      onRequireAuth?.();
+      return;
+    }
     const uid = tgid || webUserId?.toString();
     if (showSpotConfirm === 'buy') {
       if (uid) requirePin(uid, t('enter_pin_for_confirm'), handleSpotBuy);
@@ -864,44 +1252,112 @@ const TradingPage: React.FC<TradingPageProps> = ({
     >
       {!isFullscreen && (
         <>
-          <PageHeader
-            title={
-              <button
-                type="button"
-                onClick={() => { Haptic.tap(); setShowAssetSearch(true); }}
-                className="text-lg font-semibold text-textPrimary tracking-tight hover:text-neon transition-colors active:scale-[0.99] text-left"
-                aria-label={t('search_pair')}
-              >
-                {pairLabel}
-              </button>
-            }
-            onBack={onBack}
-            right={
-              <span className={`text-sm font-mono font-bold ${priceDirection === 'up' ? 'text-up' : priceDirection === 'down' ? 'text-down' : 'text-textPrimary'}`}>
-                {quoteUnavailable
-                  ? '—'
-                  : showAsFxQuote
-                    ? formatFxRateQuote(midPriceRub / rubPerUsd!)
-                    : `${formatPrice(livePrice)} ${symbol}`}
-              </span>
-            }
-          />
-          {/* 2. Tabs — График | Торговля */}
-          <div className="flex items-stretch pt-0 border-b border-border z-20 bg-background">
-            <button
-              onClick={() => { Haptic.tap(); setActiveTab('CHART'); }}
-              className={`flex-1 py-3 text-sm font-medium relative transition-colors duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] ${activeTab === 'CHART' ? 'text-neon' : 'text-neutral-500 hover:text-neutral-400'}`}
-            >
-              {t('chart')}
-              {activeTab === 'CHART' && <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-neon transition-opacity duration-200" />}
-            </button>
-            <button
-              onClick={() => { Haptic.tap(); setActiveTab('TRADE'); }}
-              className={`flex-1 py-3 text-sm font-medium relative transition-colors duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] ${activeTab === 'TRADE' ? 'text-neon' : 'text-neutral-500 hover:text-neutral-400'}`}
-            >
-              {t('trade')}
-              {activeTab === 'TRADE' && <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-neon transition-opacity duration-200" />}
-            </button>
+          {/* MEXC-like top mode tabs (нет для NFT-трейдинга) */}
+          <div className="sticky top-0 z-40 bg-background/95 backdrop-blur-md hairline-bottom">
+            {!isNft ? (
+              <>
+                <div className="px-4 pt-2.5 pb-2 flex items-center gap-2 sm:gap-3">
+                  <div
+                    className="inline-flex shrink-0 items-center gap-px rounded-[10px] bg-white/[0.04] p-0.5"
+                    role="tablist"
+                  >
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={tradeType === 'spot'}
+                      onClick={() => {
+                        Haptic.tap();
+                        setTradeType('spot');
+                        setActiveTab('TRADE');
+                      }}
+                      className={`min-w-[4.75rem] px-3.5 h-8 rounded-[9px] text-[13px] font-semibold tracking-tight transition-colors duration-200 ${
+                        tradeType === 'spot'
+                          ? 'text-textPrimary bg-white/[0.11] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]'
+                          : 'text-textMuted hover:text-textSecondary'
+                      }`}
+                    >
+                      {t('trade_type_spot_caps')}
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={tradeType === 'futures'}
+                      onClick={() => {
+                        Haptic.tap();
+                        setTradeType('futures');
+                        setActiveTab('TRADE');
+                      }}
+                      className={`min-w-[4.75rem] px-3.5 h-8 rounded-[9px] text-[13px] font-semibold tracking-tight transition-colors duration-200 ${
+                        tradeType === 'futures'
+                          ? 'text-textPrimary bg-white/[0.11] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]'
+                          : 'text-textMuted hover:text-textSecondary'
+                      }`}
+                    >
+                      {t('trade_type_futures_caps')}
+                    </button>
+                  </div>
+
+                  <div className="min-w-0 flex-1" />
+
+                  <div className="max-w-[min(48%,12rem)] shrink-0 text-right sm:max-w-[46%] sm:border-l sm:border-white/[0.07] sm:pl-3">
+                    <span className="block text-[11px] leading-snug text-textSecondary font-semibold tabular-nums tracking-tight sm:text-[12px]">
+                      {t('up_to_apr', { apr: 20 })}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="mx-4 mb-px h-px shrink-0 rounded-full bg-gradient-to-r from-transparent via-white/[0.1] to-transparent" aria-hidden />
+              </>
+            ) : null}
+
+            {/* Pair row */}
+            <div className={`px-4 pb-2 ${isNft ? 'pt-2' : 'pt-1.5'}`}>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => { Haptic.tap(); setShowAssetSearch(true); }}
+                  className="font-mono text-[18px] font-bold text-textPrimary"
+                  aria-label={t('search_pair')}
+                >
+                  {pairLabel}
+                </button>
+                <span className={`px-2 py-0.5 rounded-md text-[12px] font-mono ${displayChange24h >= 0 ? 'bg-up/15 text-up' : 'bg-down/15 text-down'}`}>
+                  {(displayChange24h ?? 0) >= 0 ? '+' : ''}{(displayChange24h ?? 0).toFixed(2)}%
+                </span>
+                <div className="flex-1" />
+                {tradeType === 'futures' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      Haptic.tap();
+                      setActiveTab('TRADE');
+                      setTradeType('futures');
+                    }}
+                    className="px-2.5 py-1 rounded-full bg-white/[0.08] text-textPrimary text-[12px] font-mono font-bold active:scale-[0.98] transition-transform"
+                    aria-label={t('leverage_title')}
+                    title={t('leverage_title')}
+                  >
+                    ×{leverage}
+                  </button>
+                )}
+                {!isNft ? (
+                  <button
+                    type="button"
+                    onClick={() => { Haptic.tap(); setActiveTab(activeTab === 'TRADE' ? 'CHART' : 'TRADE'); }}
+                    className={[
+                      'h-9 w-9 rounded-2xl flex items-center justify-center active:scale-[0.98] transition-transform',
+                      activeTab === 'CHART'
+                        ? 'bg-white/[0.14] text-textPrimary shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]'
+                        : 'bg-white/[0.04] text-textSecondary',
+                    ].join(' ')}
+                    aria-label={t('chart_toggle_aria')}
+                    title={t('chart_title')}
+                  >
+                    <BarChart3 size={18} />
+                  </button>
+                ) : null}
+              </div>
+            </div>
           </div>
         </>
       )}
@@ -909,7 +1365,8 @@ const TradingPage: React.FC<TradingPageProps> = ({
       {/* 3. Main Content Area */}
       <div className="flex-1 relative overflow-hidden">
         
-        {/* VIEW: CHART — edge-to-edge график */}
+        {/* VIEW: CHART — edge-to-edge график (не для NFT) */}
+        {!isNft ? (
         <div
           className={`absolute inset-0 flex flex-col transition-opacity duration-300 ${
             activeTab === 'CHART' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'
@@ -922,16 +1379,13 @@ const TradingPage: React.FC<TradingPageProps> = ({
               price={
                 quoteUnavailable
                   ? '—'
-                  : showAsFxQuote
-                    ? formatFxRateQuote(midPriceRub / rubPerUsd!)
-                    : formatPrice(livePrice)
+                  : formatPrice(livePrice)
               }
               change24h={displayChange24h ?? 0}
               chartStyle={chartStyle}
               onChartStyleChange={setChartStyle}
               provider={provider}
               onProviderChange={setProvider}
-              isForex={asset.category === 'forex'}
               isFullscreen={isFullscreen}
               onFullscreenToggle={() => setIsFullscreen((v) => !v)}
               onCloseFullscreen={() => setIsFullscreen(false)}
@@ -940,9 +1394,13 @@ const TradingPage: React.FC<TradingPageProps> = ({
             {/* График: edge-to-edge контейнер */}
             <div
               className={`relative w-full bg-[#131722] overflow-hidden flex-1 min-h-[360px] md:min-h-[480px] lg:min-h-[560px] ${
-                isFullscreen ? 'fixed inset-0 z-50 chart-fullscreen transition-all duration-300' : ''
+                isFullscreen ? 'fixed inset-0 chart-fullscreen transition-all duration-300' : ''
               }`}
-              style={isFullscreen ? { transition: 'all 300ms ease' } : undefined}
+              style={
+                isFullscreen
+                  ? { transition: 'all 300ms ease', zIndex: Z_INDEX.fullscreen }
+                  : undefined
+              }
             >
               {/* Watermark */}
               <div
@@ -1020,10 +1478,10 @@ const TradingPage: React.FC<TradingPageProps> = ({
               </div>
             </div>
 
-            {/* Лента данных снизу (только не fullscreen) */}
+            {/* Bottom info row (compact, stays visible) */}
             {!isFullscreen && (
-              <div className="w-full px-4 py-3 border-t border-border/40 bg-background overflow-hidden relative z-30">
-                <div className="flex items-center gap-6 overflow-x-auto no-scrollbar">
+              <div className="w-full px-4 py-2 border-t border-border/40 bg-background/90 backdrop-blur overflow-hidden relative z-30">
+                <div className="flex items-center gap-5 overflow-x-auto no-scrollbar">
                   <div className="min-w-[90px]">
                     <div className="text-[10px] text-textMuted uppercase font-bold">{t('ticker')}</div>
                     <div className="text-xs font-mono text-white font-bold">{getTradingViewSymbolLabelForAsset(asset)}</div>
@@ -1033,9 +1491,7 @@ const TradingPage: React.FC<TradingPageProps> = ({
                     <div className="text-xs font-mono text-neon font-bold">
                       {quoteUnavailable
                         ? '—'
-                        : showAsFxQuote
-                          ? formatFxRateQuote(midPriceRub / rubPerUsd!)
-                          : formatPrice(livePrice)}
+                        : formatPrice(livePrice)}
                     </div>
                   </div>
                   <div className="min-w-[90px]">
@@ -1053,11 +1509,11 @@ const TradingPage: React.FC<TradingPageProps> = ({
                     <div className="text-[10px] text-textMuted uppercase font-bold">{t('volume_24h')}</div>
                     <div className="text-xs text-textSecondary">
                       {asset.volume24h >= 1e9
-                        ? (convertFromRub(asset.volume24h) / 1e9).toFixed(2) + ' млрд'
+                        ? (convertFromRub(asset.volume24h) / 1e9).toFixed(2) + ' ' + t('vol_b')
                         : asset.volume24h >= 1e6
-                          ? (convertFromRub(asset.volume24h) / 1e6).toFixed(2) + ' млн'
+                          ? (convertFromRub(asset.volume24h) / 1e6).toFixed(2) + ' ' + t('vol_m')
                           : asset.volume24h >= 1e3
-                            ? (convertFromRub(asset.volume24h) / 1e3).toFixed(1) + 'k'
+                            ? (convertFromRub(asset.volume24h) / 1e3).toFixed(1) + ' ' + t('vol_k')
                             : formatPrice(asset.volume24h)}{' '}
                       {symbol}
                     </div>
@@ -1069,51 +1525,83 @@ const TradingPage: React.FC<TradingPageProps> = ({
                     </div>
                   </div>
                   <div className="min-w-[140px]">
-                    <div className="text-[10px] text-textMuted uppercase font-bold">Provider</div>
+                    <div className="text-[10px] text-textMuted uppercase font-bold">{t('provider')}</div>
                     <div className="text-xs text-neon">{provider}</div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* MEXC-like bottom actions: dock above bottom nav */}
+            {!isFullscreen && (
+              <div className="pointer-events-none fixed left-0 right-0 bottom-0 z-40 pb-safe lg:hidden">
+                {/* Dock sits right above BottomNav, no extra gap */}
+                <div
+                  className="pointer-events-auto"
+                  style={{ paddingBottom: 'max(8px, env(safe-area-inset-bottom, 0px))' }}
+                >
+                  <div className="nav-glass w-full px-3 py-1.5">
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          Haptic.tap();
+                          setActiveTab('TRADE');
+                          setTradeType('futures');
+                          setSide('UP');
+                        }}
+                        className="flex-1 h-9 rounded-xl bg-up text-black font-bold text-[12px] active:scale-[0.98] transition-transform shadow-elevation-2"
+                      >
+                        {t('open_long')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          Haptic.tap();
+                          setActiveTab('TRADE');
+                          setTradeType('futures');
+                          setSide('DOWN');
+                        }}
+                        className="flex-1 h-9 rounded-xl bg-down text-black font-bold text-[12px] active:scale-[0.98] transition-transform shadow-elevation-2"
+                      >
+                        {t('open_short')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { Haptic.tap(); setActiveTab('TRADE'); }}
+                        className="h-9 w-12 rounded-xl bg-white/10 border border-white/10 text-textPrimary text-[11px] font-semibold active:scale-[0.98] transition-transform"
+                      >
+                        {t('show')}
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
             )}
           </div>
         </div>
+        ) : null}
 
-        {/* VIEW: TRADE (Split Layout) — отступы: panel между блоками, table внутри стакана */}
+        {/* VIEW: TRADE (MEXC-like split: form + order book) */}
         <div
-          className={`absolute inset-0 flex flex-col lg:flex-row transition-opacity duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
-            isFullscreen ? 'opacity-0 z-0 pointer-events-none' : activeTab === 'TRADE' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'
+          className={`absolute inset-0 flex flex-row transition-opacity duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
+            isFullscreen
+              ? 'opacity-0 z-0 pointer-events-none'
+              : isNft || activeTab === 'TRADE'
+                ? 'opacity-100 z-10'
+                : 'opacity-0 z-0 pointer-events-none'
           }`}
         >
             
-            {/* LEFT COLUMN: Controls (60%) — воздух в заголовках, блоки через gap-6 */}
-            <div className="w-full lg:w-[60%] h-full flex flex-col p-4 lg:border-r border-border overflow-y-auto no-scrollbar bg-background gap-4">
-                {/* Фьючерсы / Спот (для Forex только фьючерсы) */}
-                {!isForex && (
-                  <div className="flex bg-card rounded-lg p-1 border border-border">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        Haptic.tap();
-                        setTradeType('futures');
-                      }}
-                      className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-all ${tradeType === 'futures' ? 'bg-neutral-800 text-white' : 'text-neutral-500'}`}
-                    >
-                      {t('trade_type_futures')}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        Haptic.tap();
-                        setTradeType('spot');
-                      }}
-                      className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-all ${tradeType === 'spot' ? 'bg-neutral-800 text-white' : 'text-neutral-500'}`}
-                    >
-                      {t('trade_type_spot')}
-                    </button>
-                  </div>
-                )}
+            {/* LEFT COLUMN: форма; для NFT — на всю ширину без «пустого» стакана справа */}
+            <div
+              className={`h-full min-h-0 flex flex-col p-4 overflow-y-auto no-scrollbar bg-background gap-4 ${
+                isNft ? 'w-full' : 'w-[56%] lg:w-[56%] border-r border-border'
+              }`}
+            >
+                {/* tradeType переключается сверху (MEXC tabs) */}
 
-                {advanced && <div className="flex items-center gap-2">
+                {advanced && !isNft && <div className="flex items-center gap-2">
                   <div className="flex bg-surface/50 rounded-lg p-0.5 border border-border/60 flex-1 min-w-0">
                     {(['market', 'limit', 'stop'] as const).map((ot) => {
                       const labelKey =
@@ -1147,7 +1635,7 @@ const TradingPage: React.FC<TradingPageProps> = ({
                   </button>
                 </div>}
 
-                {advanced && orderTypeUI !== 'market' && (
+                {advanced && !isNft && orderTypeUI !== 'market' && (
                   <div className="space-y-1">
                     <label className="text-[10px] text-neutral-500 uppercase font-bold">
                       {orderTypeUI === 'limit' ? t('order_limit_price') : t('order_stop_trigger')}
@@ -1168,7 +1656,7 @@ const TradingPage: React.FC<TradingPageProps> = ({
                   </div>
                 )}
 
-                {advanced && <div className="flex flex-wrap items-center gap-1.5">
+                {advanced && !isNft && <div className="flex flex-wrap items-center gap-1.5">
                   <span className="text-[10px] text-neutral-500 uppercase font-bold w-full">{t('risk_presets')}</span>
                   {[0.01, 0.02, 0.05, 0.1].map((p) => (
                     <button
@@ -1185,17 +1673,54 @@ const TradingPage: React.FC<TradingPageProps> = ({
                 {/* SPOT: Купить / Продать — в стиле фьючерсов */}
                 {tradeType === 'spot' && (
                     <div className="space-y-3">
+                        {isNft && asset.nft && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              Haptic.tap();
+                              onBack();
+                            }}
+                            className="group w-full rounded-2xl overflow-hidden bg-white/[0.04] ring-1 ring-white/[0.08] text-left active:scale-[0.99] transition-transform outline-none focus-visible:ring-2 focus-visible:ring-neon/30"
+                          >
+                            <div className="flex gap-3 p-3 items-center">
+                              <div className="h-16 w-16 rounded-xl overflow-hidden bg-black/40 shrink-0 ring-1 ring-white/10">
+                                <img
+                                  src={asset.nft.imageUrl}
+                                  alt=""
+                                  className="h-full w-full object-cover"
+                                  loading="lazy"
+                                  referrerPolicy="no-referrer"
+                                />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="text-[10px] text-textMuted uppercase tracking-wider font-semibold truncate">
+                                  {asset.nft.collectionName}
+                                </div>
+                                <div className="font-mono text-[15px] font-bold text-textPrimary">{asset.nft.codeDisplay}</div>
+                                <div className="text-[11px] text-textSubtle mt-1">
+                                  {t('nft_list_price_eth')}:{' '}
+                                  <span className="font-mono tabular-nums">
+                                    {asset.nft.priceEth.toLocaleString(undefined, { maximumFractionDigits: 4 })} ETH
+                                  </span>
+                                </div>
+                              </div>
+                              <ChevronRight
+                                size={20}
+                                className="shrink-0 text-textMuted opacity-60 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all"
+                                aria-hidden
+                              />
+                            </div>
+                          </button>
+                        )}
                         {/* Направление: Купить / Продать */}
-                        <div className="space-y-0.5">
-                            <label className="text-[10px] text-neutral-500 uppercase font-bold">{t('direction')}</label>
-                            <div className="flex gap-2">
+                        <div className="flex gap-1.5 p-1 rounded-full bg-white/5 border border-white/5">
                                 <button
                                     type="button"
                                     onClick={() => { Haptic.tap(); setSpotAction('buy'); }}
-                                    className={`flex-1 py-2 rounded-lg font-bold text-xs transition-all border
+                                    className={`flex-1 h-9 rounded-full font-bold text-[12px] transition-all
                                         ${spotAction === 'buy'
-                                            ? 'bg-up/10 text-up border border-up'
-                                            : 'bg-card text-textSecondary border-border hover:border-neutral-600'
+                                            ? 'bg-up text-black shadow-elevation-1'
+                                            : 'text-textSecondary'
                                         }`}
                                 >
                                     {t('spot_buy')}
@@ -1203,156 +1728,385 @@ const TradingPage: React.FC<TradingPageProps> = ({
                                 <button
                                     type="button"
                                     onClick={() => { Haptic.tap(); setSpotAction('sell'); }}
-                                    className={`flex-1 py-2 rounded-lg font-bold text-xs transition-all border
+                                    className={`flex-1 h-9 rounded-full font-bold text-[12px] transition-all
                                         ${spotAction === 'sell'
-                                            ? 'bg-down/10 text-down border border-down'
-                                            : 'bg-card text-textSecondary border-border hover:border-neutral-600'
+                                            ? 'bg-down text-black shadow-elevation-1'
+                                            : 'text-textSecondary'
                                         }`}
                                 >
                                     {t('spot_sell')}
                                 </button>
-                            </div>
                         </div>
 
-                        {spotAction === 'buy' && (
+                        {spotAction === 'buy' &&
+                          (isNft ? (
                             <>
-                                {/* Сумма в валюте */}
-                                <div className="space-y-0.5">
-                                    <label className="text-[10px] text-neutral-500 uppercase font-bold">
-                                      {t('amount_label')} ({symbol})
-                                    </label>
-                                    <div className="bg-card border border-border rounded-lg px-3 py-1.5 flex items-center justify-between focus-within:border-neon transition-colors">
-                                        <input
-                                            type="text"
-                                            inputMode="decimal"
-                                            value={spotAmount}
-                                            onChange={(e) => setSpotAmount(e.target.value)}
-                                            className="w-full bg-transparent text-white font-mono text-lg font-bold outline-none placeholder-neutral-700"
-                                            placeholder="0"
-                                        />
-                                    </div>
-                                    <div className="text-[9px] text-neutral-600 px-1 flex items-center gap-2 flex-wrap">
-                                        <span>{t('available')}: {formatPrice(balance)} {symbol}</span>
-                                        <span className="flex items-center gap-0.5">
-                                          <Info size={9} /> {t('min')}: {formatPrice(MIN_DEAL_RUB)} {symbol}
-                                        </span>
-                                    </div>
+                              <div className="space-y-3">
+                                <div className="flex items-start justify-between gap-2 px-0.5">
+                                  <span className="text-[10px] text-neutral-500 uppercase font-bold leading-snug">{t('nft_trade_unit_price')}</span>
+                                  <div className="text-right min-w-0">
+                                    <span className="block font-mono text-sm font-bold text-neon tabular-nums truncate">
+                                      {quoteUnavailable ? '—' : `${formatPrice(livePrice)} ${symbol}`}
+                                    </span>
+                                    {asset.nft && (
+                                      <span className="text-[10px] text-textMuted font-mono block mt-0.5 tabular-nums">
+                                        · {asset.nft.priceEth.toLocaleString(undefined, { maximumFractionDigits: 6 })} ETH
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
-                                {/* Расчёт: получите ≈ X {ticker} */}
-                                {livePrice > 0 && convertToRub(parseFloat(spotAmount.replace(',', '.')) || 0) >= MIN_DEAL_RUB && (
-                                  <div className="rounded-lg border border-border bg-card px-2 py-1.5 flex items-center justify-between gap-2">
-                                    <span className="text-[10px] text-neutral-500 uppercase font-bold">{t('you_receive')}</span>
-                                    <span className="text-xs font-mono font-bold text-neon">
-                                      ≈ {(() => {
-                                        const displayAmount = parseFloat(spotAmount.replace(',', '.')) || 0;
-                                        const base = livePrice > 0 ? convertToRub(displayAmount) / livePrice : 0;
-                                        const value = base > 0 ? base.toFixed(8) : '0';
-                                        return `${value} ${asset.ticker}`;
-                                      })()}
+
+                                <div className="space-y-1.5">
+                                  <label className="text-[10px] text-neutral-500 uppercase font-bold">{t('nft_trade_quantity')}</label>
+                                  <div
+                                    className="flex w-full max-w-[min(100%,15rem)] mx-auto items-stretch overflow-hidden rounded-2xl border border-white/[0.12] bg-gradient-to-b from-white/[0.08] to-white/[0.03] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)] ring-1 ring-black/20"
+                                    role="group"
+                                    aria-label={t('nft_trade_quantity')}
+                                  >
+                                    <button
+                                      type="button"
+                                      aria-label="-1 NFT"
+                                      onClick={() => {
+                                        Haptic.tap();
+                                        setNftQtyBuyStr((prev) =>
+                                          String(Math.max(1, parseDiscreteNftQtyString(prev, 1) - 1))
+                                        );
+                                      }}
+                                      className="flex min-h-[2.875rem] min-w-[2.75rem] flex-1 items-center justify-center text-textPrimary transition-colors hover:bg-white/[0.07] active:bg-white/[0.11] disabled:pointer-events-none disabled:opacity-[0.28] focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neon/35 focus-visible:ring-inset border-r border-white/[0.08]"
+                                      disabled={nftBuyCalc.qtyWish <= 1}
+                                    >
+                                      <Minus size={20} strokeWidth={2.25} className="text-textSecondary" />
+                                    </button>
+                                    <div
+                                      className="flex min-w-[3.25rem] shrink-0 items-center justify-center bg-black/30 px-4 py-2.5"
+                                      aria-live="polite"
+                                      aria-atomic="true"
+                                    >
+                                      <span className="font-mono text-[18px] font-bold tabular-nums leading-none tracking-tight text-textPrimary">
+                                        {nftBuyCalc.qtyWish}
+                                      </span>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      aria-label="+1 NFT"
+                                      onClick={() => {
+                                        Haptic.tap();
+                                        setNftQtyBuyStr((prev) => String(parseDiscreteNftQtyString(prev, 1) + 1));
+                                      }}
+                                      className="flex min-h-[2.875rem] min-w-[2.75rem] flex-1 items-center justify-center text-textPrimary transition-colors hover:bg-white/[0.07] active:bg-white/[0.11] focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neon/35 focus-visible:ring-inset border-l border-white/[0.08]"
+                                    >
+                                      <Plus size={20} strokeWidth={2.25} className="text-neon" />
+                                    </button>
+                                  </div>
+                                  {nftBuyCalc.maxAffordableQty > 0 ? (
+                                    <p className="text-[9px] text-textMuted px-0.5">
+                                      {t('nft_trade_qty_max', { max: nftBuyCalc.maxAffordableQty })}
+                                    </p>
+                                  ) : null}
+                                </div>
+
+                                <div className="flex items-center justify-between gap-2 px-0.5 pt-1">
+                                  <span className="text-[10px] text-textSubtle font-semibold uppercase">{t('nft_trade_total')}</span>
+                                  <span className="font-mono text-base font-bold text-neon tabular-nums">
+                                    {livePrice <= 0 || quoteUnavailable
+                                      ? '—'
+                                      : `${formatPrice(nftBuyCalc.amountRub)} ${symbol}`}
+                                  </span>
+                                </div>
+                                <div className="flex items-center justify-between gap-2 px-0.5">
+                                  <span className="text-[10px] text-textSubtle font-semibold whitespace-nowrap">{t('you_receive')}</span>
+                                  <span className="text-[12px] font-mono font-bold text-textPrimary text-right truncate">
+                                    {livePrice <= 0 || quoteUnavailable ? '—' : t('nft_trade_you_receive_coin', { qty: nftBuyCalc.qtyWish })}
+                                  </span>
+                                </div>
+
+                                <div className="text-[9px] text-neutral-600 px-0.5 flex flex-wrap gap-x-2 gap-y-0.5">
+                                  <span>
+                                    {t('available')}: {balanceLoading ? '—' : `${formatPrice(balance)} ${symbol}`}
+                                  </span>
+                                  <span className="flex items-center gap-0.5">
+                                    <Info size={9} /> {t('min')}: {formatPrice(MIN_DEAL_RUB)} {symbol}
+                                  </span>
+                                </div>
+                                <p className="text-[9px] text-neutral-500 px-0.5 leading-tight">{t('nft_trade_buy_note')}</p>
+                              </div>
+                              <button
+                                type="button"
+                                disabled={
+                                  spotLoading ||
+                                  tradingBlocked ||
+                                  balanceLoading ||
+                                  quoteUnavailable ||
+                                  livePrice <= 0 ||
+                                  !nftBuyCalc.affordable
+                                }
+                                onClick={() => {
+                                  Haptic.tap();
+                                  setShowSpotConfirm('buy');
+                                }}
+                                className="w-full h-12 rounded-2xl font-bold text-base active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-up text-black shadow-elevation-2"
+                              >
+                                {spotLoading ? '...' : `${t('spot_buy')} · ×${nftBuyCalc.qtyWish}`}
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <div className="space-y-0.5">
+                                <label className="text-[10px] text-neutral-500 uppercase font-bold">
+                                  {t('amount_label')} ({symbol})
+                                </label>
+                                <div className="bg-card border border-border rounded-lg px-3 py-1.5 flex items-center justify-between focus-within:border-neon transition-colors">
+                                  <input
+                                    type="text"
+                                    inputMode="decimal"
+                                    value={spotAmount}
+                                    onChange={(e) => setSpotAmount(e.target.value)}
+                                    className="w-full bg-transparent text-white font-mono text-lg font-bold outline-none placeholder-neutral-700"
+                                    placeholder="0"
+                                  />
+                                </div>
+                                <div className="text-[9px] text-neutral-600 px-1 flex items-center gap-2 flex-wrap">
+                                  <span>{t('available')}: {balanceLoading ? '—' : `${formatPrice(balance)} ${symbol}`}</span>
+                                  <span className="flex items-center gap-0.5">
+                                    <Info size={9} /> {t('min')}: {formatPrice(MIN_DEAL_RUB)} {symbol}
+                                  </span>
+                                </div>
+                              </div>
+                              {livePrice > 0 && convertToRub(parseFloat(spotAmount.replace(',', '.')) || 0) >= MIN_DEAL_RUB && (
+                                <div className="flex items-center justify-between gap-2 px-1">
+                                  <span className="text-[10px] text-textSubtle font-semibold whitespace-nowrap">{t('you_receive')}</span>
+                                  <span className="text-[11px] font-mono font-semibold text-textSecondary truncate text-right">
+                                    ≈ {(() => {
+                                      const displayAmount = parseFloat(spotAmount.replace(',', '.')) || 0;
+                                      const base = livePrice > 0 ? convertToRub(displayAmount) / livePrice : 0;
+                                      const value = base > 0 ? base.toFixed(8) : '0';
+                                      return `${value} ${asset.ticker}`;
+                                    })()}
+                                  </span>
+                                </div>
+                              )}
+                              <p className="text-[9px] text-neutral-500 px-0.5 leading-tight">{t('spot_buy_note')}</p>
+                              {orderTypeUI === 'market' ? (
+                                <button
+                                  type="button"
+                                  disabled={
+                                    spotLoading ||
+                                    tradingBlocked ||
+                                    balanceLoading ||
+                                    convertToRub(parseFloat(spotAmount.replace(',', '.')) || 0) < MIN_DEAL_RUB
+                                  }
+                                  onClick={() => {
+                                    Haptic.tap();
+                                    setShowSpotConfirm('buy');
+                                  }}
+                                  className="w-full h-12 rounded-2xl font-bold text-base active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-up text-black shadow-elevation-2"
+                                >
+                                  {spotLoading ? '...' : `${t('spot_buy')} ${asset.ticker}`}
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  disabled={tradingBlocked}
+                                  onClick={() => {
+                                    Haptic.tap();
+                                    placeSpotLimitStop();
+                                  }}
+                                  className="w-full py-2.5 rounded-xl font-bold text-sm uppercase tracking-wide active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-neon text-black hover:opacity-90 hover-glow"
+                                >
+                                  {t('place_order_btn')}
+                                </button>
+                              )}
+                            </>
+                          ))}
+
+                        {spotAction === 'sell' &&
+                          (isNft ? (
+                            <>
+                              <div className="space-y-3">
+                                <div className="flex items-start justify-between gap-2 px-0.5">
+                                  <span className="text-[10px] text-neutral-500 uppercase font-bold">{t('nft_trade_unit_price')}</span>
+                                  <span className="font-mono text-sm font-bold text-neon tabular-nums text-right truncate">
+                                    {quoteUnavailable ? '—' : `${formatPrice(livePrice)} ${symbol}`}
+                                  </span>
+                                </div>
+                                <div className="space-y-1.5">
+                                  <label className="text-[10px] text-neutral-500 uppercase font-bold">{t('nft_trade_quantity')}</label>
+                                  <div
+                                    className="flex w-full max-w-[min(100%,15rem)] mx-auto items-stretch overflow-hidden rounded-2xl border border-white/[0.12] bg-gradient-to-b from-white/[0.08] to-white/[0.03] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)] ring-1 ring-black/20"
+                                    role="group"
+                                    aria-label={t('nft_trade_quantity')}
+                                  >
+                                    <button
+                                      type="button"
+                                      aria-label="-1 NFT"
+                                      onClick={() => {
+                                        Haptic.tap();
+                                        setNftQtySellStr((prev) =>
+                                          String(Math.max(1, parseDiscreteNftQtyString(prev, 1) - 1))
+                                        );
+                                      }}
+                                      className="flex min-h-[2.875rem] min-w-[2.75rem] flex-1 items-center justify-center text-textPrimary transition-colors hover:bg-white/[0.07] active:bg-white/[0.11] disabled:pointer-events-none disabled:opacity-[0.28] focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neon/35 focus-visible:ring-inset border-r border-white/[0.08]"
+                                      disabled={nftSellWholeMax < 1 || nftSellRawWish <= 1}
+                                    >
+                                      <Minus size={20} strokeWidth={2.25} className="text-down" />
+                                    </button>
+                                    <div
+                                      className="flex min-w-[3.25rem] shrink-0 items-center justify-center bg-black/30 px-4 py-2.5"
+                                      aria-live="polite"
+                                      aria-atomic="true"
+                                    >
+                                      <span className="font-mono text-[18px] font-bold tabular-nums leading-none tracking-tight text-textPrimary">
+                                        {nftSellWholeMax < 1 ? '—' : nftSellRawWish}
+                                      </span>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      aria-label="+1 NFT"
+                                      onClick={() => {
+                                        Haptic.tap();
+                                        setNftQtySellStr((prev) =>
+                                          String(
+                                            Math.min(
+                                              parseDiscreteNftQtyString(prev, 1) + 1,
+                                              Math.max(nftSellWholeMax, 1)
+                                            )
+                                          )
+                                        );
+                                      }}
+                                      disabled={nftSellWholeMax < 1 || nftSellRawWish >= nftSellWholeMax}
+                                      className="flex min-h-[2.875rem] min-w-[2.75rem] flex-1 items-center justify-center text-textPrimary transition-colors hover:bg-white/[0.07] active:bg-white/[0.11] disabled:pointer-events-none disabled:opacity-[0.28] focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neon/35 focus-visible:ring-inset border-l border-white/[0.08]"
+                                    >
+                                      <Plus size={20} strokeWidth={2.25} className="text-textSecondary" />
+                                    </button>
+                                  </div>
+                                  <div className="text-[9px] text-neutral-600 px-0.5">
+                                    <span>{t('available')} — {nftSellWholeMax}</span>{' '}
+                                    {asset.nft ? <span className="text-neutral-500">({asset.nft.codeDisplay})</span> : null}
+                                  </div>
+                                </div>
+                                {livePrice > 0 && nftSellValid ? (
+                                  <div className="flex items-center justify-between gap-2 px-0.5">
+                                    <span className="text-[10px] text-textSubtle font-semibold whitespace-nowrap">{t('nft_trade_you_receive_currency')}</span>
+                                    <span className="text-[13px] font-mono font-bold text-textSecondary truncate text-right tabular-nums">
+                                      ≈ {formatPrice(nftSellProceedsRub)} {symbol}
                                     </span>
                                   </div>
-                                )}
-                                <p className="text-[9px] text-neutral-500 px-0.5 leading-tight">{t('spot_buy_note')}</p>
-                                {orderTypeUI === 'market' ? (
-                                <button
-                                    type="button"
-                                    disabled={spotLoading || tradingBlocked || convertToRub(parseFloat(spotAmount.replace(',', '.')) || 0) < MIN_DEAL_RUB}
-                                    onClick={() => { Haptic.tap(); setShowSpotConfirm('buy'); }}
-                                    className="w-full py-2.5 rounded-xl font-bold text-sm uppercase tracking-wide active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-neon text-black hover:opacity-90 hover-glow"
-                                >
-                                    {spotLoading ? '...' : t('spot_buy')}
-                                </button>
-                                ) : (
-                                <button
-                                    type="button"
-                                    disabled={tradingBlocked}
-                                    onClick={() => { Haptic.tap(); placeSpotLimitStop(); }}
-                                    className="w-full py-2.5 rounded-xl font-bold text-sm uppercase tracking-wide active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-neon text-black hover:opacity-90 hover-glow"
-                                >
-                                    {t('place_order_btn')}
-                                </button>
-                                )}
-                            </>
-                        )}
-
-                        {spotAction === 'sell' && (
-                            <>
-                                {/* Количество актива */}
-                                <div className="space-y-0.5">
-                                    <label className="text-[10px] text-neutral-500 uppercase font-bold">{asset.ticker} — {t('amount_label')}</label>
-                                    <div className="bg-surface border border-neutral-800 rounded-lg px-3 py-1.5 flex items-center justify-between gap-2 focus-within:border-neon/50 transition-colors">
-                                        <input
-                                            type="text"
-                                            inputMode="decimal"
-                                            value={spotQuantity}
-                                            onChange={(e) => setSpotQuantity(e.target.value)}
-                                            className="flex-1 bg-transparent text-white font-mono text-lg font-bold outline-none placeholder-neutral-700"
-                                            placeholder="0"
-                                        />
-                                        <button
-                                            type="button"
-                                            onClick={() => { Haptic.tap(); setSpotQuantity(holdingAmount > 0 ? holdingAmount.toFixed(8) : '0'); }}
-                                            className="px-2.5 py-1 rounded-md bg-card text-neon border border-neon text-xs font-mono font-bold hover:bg-surface active:scale-95"
-                                        >
-                                            Max
-                                        </button>
-                                    </div>
-                                    <div className="flex flex-wrap gap-1.5">
-                                        {[0.25, 0.5, 0.75, 1].map((pct) => (
-                                            <button
-                                                key={pct}
-                                                type="button"
-                                                onClick={() => {
-                                                    Haptic.tap();
-                                                    if (pct === 1) setSpotQuantity(holdingAmount > 0 ? holdingAmount.toFixed(8) : '0');
-                                                    else setSpotQuantity(String((holdingAmount * pct).toFixed(8)));
-                                                }}
-                                                className="px-2.5 py-1 rounded-md bg-card text-textSecondary text-xs font-mono border border-border hover:bg-surface hover:text-textPrimary active:scale-95"
-                                            >
-                                                {pct === 1 ? 'Max' : (pct * 100) + '%'}
-                                            </button>
-                                        ))}
-                                    </div>
-                                    <div className="text-[9px] text-neutral-600 px-1 flex items-center gap-2 flex-wrap">
-                                        <span>{t('available')}: {holdingAmount.toFixed(8)} {asset.ticker}</span>
-                                        {currentHolding && (
-                                            <span className="text-neutral-500">
-                                                ≈ {formatPrice(holdingAmount * currentHolding.avgPriceRub)} {symbol}
-                                            </span>
-                                        )}
-                                    </div>
-                                </div>
-                                {/* Расчёт: получите ≈ X {symbol} */}
-                                {livePrice > 0 && parseFloat(spotQuantity) > 0 && parseFloat(spotQuantity) <= holdingAmount && (
-                                    <div className="rounded-lg border border-border bg-card px-2 py-1.5 flex items-center justify-between gap-2">
-                                        <span className="text-[10px] text-neutral-500 uppercase font-bold">{t('you_receive')}</span>
-                                        <span className="text-xs font-mono font-bold text-neon">
-                                            ≈ {formatPrice((parseFloat(spotQuantity) || 0) * livePrice)} {symbol}
-                                        </span>
-                                    </div>
-                                )}
+                                ) : null}
                                 <p className="text-[9px] text-neutral-500 px-0.5 leading-tight">{t('spot_sell_note')}</p>
-                                {orderTypeUI === 'market' ? (
-                                <button
-                                    type="button"
-                                    disabled={spotLoading || tradingBlocked || holdingAmount <= 0 || (parseFloat(spotQuantity) || 0) <= 0}
-                                    onClick={() => { Haptic.tap(); setShowSpotConfirm('sell'); }}
-                                    className="w-full py-2.5 rounded-xl font-bold text-sm uppercase tracking-wide active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-down text-white hover:opacity-90 hover-glow"
-                                >
-                                    {spotLoading ? '...' : t('spot_sell')}
-                                </button>
-                                ) : (
-                                <button
-                                    type="button"
-                                    disabled={tradingBlocked}
-                                    onClick={() => { Haptic.tap(); placeSpotLimitStop(); }}
-                                    className="w-full py-2.5 rounded-xl font-bold text-sm uppercase tracking-wide active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-down text-white hover:opacity-90 hover-glow"
-                                >
-                                    {t('place_order_btn')}
-                                </button>
-                                )}
+                              </div>
+                              <button
+                                type="button"
+                                disabled={
+                                  spotLoading ||
+                                  tradingBlocked ||
+                                  balanceLoading ||
+                                  !nftSellValid ||
+                                  nftSellWholeMax < 1
+                                }
+                                onClick={() => {
+                                  Haptic.tap();
+                                  setShowSpotConfirm('sell');
+                                }}
+                                className="w-full h-12 rounded-2xl font-bold text-base active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-down text-black shadow-elevation-2"
+                              >
+                                {spotLoading ? '...' : `${t('spot_sell')} · ×${nftSellRawWish}`}
+                              </button>
                             </>
-                        )}
+                          ) : (
+                            <>
+                              <div className="space-y-0.5">
+                                <label className="text-[10px] text-neutral-500 uppercase font-bold">
+                                  {asset.ticker} — {t('amount_label')}
+                                </label>
+                                <div className="bg-surface border border-neutral-800 rounded-lg px-3 py-1.5 flex items-center justify-between gap-2 focus-within:border-neon/50 transition-colors">
+                                  <input
+                                    type="text"
+                                    inputMode="decimal"
+                                    value={spotQuantity}
+                                    onChange={(e) => setSpotQuantity(e.target.value)}
+                                    className="flex-1 bg-transparent text-white font-mono text-lg font-bold outline-none placeholder-neutral-700"
+                                    placeholder="0"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      Haptic.tap();
+                                      setSpotQuantity(holdingAmount > 0 ? holdingAmount.toFixed(8) : '0');
+                                    }}
+                                    className="px-2.5 py-1 rounded-md bg-card text-neon border border-neon text-xs font-mono font-bold hover:bg-surface active:scale-95"
+                                  >
+                                    {t('max')}
+                                  </button>
+                                </div>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {[0.25, 0.5, 0.75, 1].map((pct) => (
+                                    <button
+                                      key={pct}
+                                      type="button"
+                                      onClick={() => {
+                                        Haptic.tap();
+                                        if (pct === 1) setSpotQuantity(holdingAmount > 0 ? holdingAmount.toFixed(8) : '0');
+                                        else setSpotQuantity(String((holdingAmount * pct).toFixed(8)));
+                                      }}
+                                      className="px-2.5 py-1 rounded-md bg-card text-textSecondary text-xs font-mono border border-border hover:bg-surface hover:text-textPrimary active:scale-95"
+                                    >
+                                      {pct === 1 ? t('max') : pct * 100 + '%'}
+                                    </button>
+                                  ))}
+                                </div>
+                                <div className="text-[9px] text-neutral-600 px-1 flex items-center gap-2 flex-wrap">
+                                  <span>
+                                    {t('available')}: {holdingAmount.toFixed(8)} {asset.ticker}
+                                  </span>
+                                  {currentHolding ? (
+                                    <span className="text-neutral-500">
+                                      ≈ {formatPrice(holdingAmount * currentHolding.avgPriceRub)} {symbol}
+                                    </span>
+                                  ) : null}
+                                </div>
+                              </div>
+                              {livePrice > 0 && parseFloat(spotQuantity) > 0 && parseFloat(spotQuantity) <= holdingAmount && (
+                                <div className="flex items-center justify-between gap-2 px-1">
+                                  <span className="text-[10px] text-textSubtle font-semibold whitespace-nowrap">{t('you_receive')}</span>
+                                  <span className="text-[11px] font-mono font-semibold text-textSecondary truncate text-right">
+                                    ≈ {formatPrice((parseFloat(spotQuantity) || 0) * livePrice)} {symbol}
+                                  </span>
+                                </div>
+                              )}
+                              <p className="text-[9px] text-neutral-500 px-0.5 leading-tight">{t('spot_sell_note')}</p>
+                              {orderTypeUI === 'market' ? (
+                                <button
+                                  type="button"
+                                  disabled={
+                                    spotLoading ||
+                                    tradingBlocked ||
+                                    balanceLoading ||
+                                    holdingAmount <= 0 ||
+                                    (parseFloat(spotQuantity) || 0) <= 0
+                                  }
+                                  onClick={() => {
+                                    Haptic.tap();
+                                    setShowSpotConfirm('sell');
+                                  }}
+                                  className="w-full h-12 rounded-2xl font-bold text-base active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-down text-black shadow-elevation-2"
+                                >
+                                  {spotLoading ? '...' : `${t('spot_sell')} ${asset.ticker}`}
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  disabled={tradingBlocked}
+                                  onClick={() => {
+                                    Haptic.tap();
+                                    placeSpotLimitStop();
+                                  }}
+                                  className="w-full py-2.5 rounded-xl font-bold text-sm uppercase tracking-wide active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-down text-white hover:opacity-90 hover-glow"
+                                >
+                                  {t('place_order_btn')}
+                                </button>
+                              )}
+                            </>
+                          ))}
 
                         {tradingBlocked && (
                             <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-200 text-[10px]">
@@ -1366,6 +2120,29 @@ const TradingPage: React.FC<TradingPageProps> = ({
                 {/* FUTURES: сумма, плечо, время, Long/Short */}
                 {tradeType === 'futures' && (
                 <>
+                {/* Direction (move up, MEXC-like) */}
+                <div className="space-y-1">
+                  <div className="flex gap-1.5 p-1 rounded-full bg-white/5 border border-white/5">
+                    <button
+                      type="button"
+                      onClick={() => { Haptic.tap(); setSide('UP'); }}
+                      className={`flex-1 h-9 rounded-full font-bold text-[12px] transition-all ${
+                        side === 'UP' ? 'bg-up text-black shadow-elevation-1' : 'text-textSecondary'
+                      }`}
+                    >
+                      {t('long')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { Haptic.tap(); setSide('DOWN'); }}
+                      className={`flex-1 h-9 rounded-full font-bold text-[12px] transition-all ${
+                        side === 'DOWN' ? 'bg-down text-black shadow-elevation-1' : 'text-textSecondary'
+                      }`}
+                    >
+                      {t('short')}
+                    </button>
+                  </div>
+                </div>
                 {/* Inputs */}
                 <div className="space-y-3">
                     
@@ -1385,7 +2162,7 @@ const TradingPage: React.FC<TradingPageProps> = ({
                             />
                           </div>
                           <div className="text-[9px] text-neutral-600 px-1 flex items-center gap-2 flex-wrap">
-                            <span>{t('available')}: {formatPrice(balance)} {symbol}</span>
+                            <span>{t('available')}: {balanceLoading ? '—' : `${formatPrice(balance)} ${symbol}`}</span>
                             <span className="flex items-center gap-0.5">
                               <Info size={9} /> {t('min')}: {formatPrice(MIN_DEAL_RUB)} {symbol}
                             </span>
@@ -1440,9 +2217,9 @@ const TradingPage: React.FC<TradingPageProps> = ({
                             <label className="text-[10px] text-neutral-500 uppercase font-bold flex items-center">
                                 <Clock size={10} className="mr-1 text-neon" /> {t('time')}
                             </label>
-                            <span className="text-xs font-mono font-bold text-neon">
-                                {TIMEFRAMES.find(tf => tf.sec === duration)?.label ?? `${duration}с`}
-                            </span>
+                    <span className="text-xs font-mono font-bold text-neon">
+                      {formatDurationLabel(duration)}
+                    </span>
                         </div>
                         <input
                             type="range"
@@ -1456,34 +2233,7 @@ const TradingPage: React.FC<TradingPageProps> = ({
                         />
                     </div>
 
-                    {/* Side Toggle (Small Buttons) */}
-                    <div className="space-y-0.5">
-                         <label className="text-[10px] text-neutral-500 uppercase font-bold">{t('direction')}</label>
-                         <div className="flex space-x-2">
-                            <button 
-                                onClick={() => { Haptic.tap(); setSide('UP'); }}
-                                className={`flex-1 py-1.5 rounded-lg font-bold text-xs transition-all border
-                                    ${side === 'UP' 
-                                        ? 'bg-up/10 text-up border border-up' 
-                                        : 'bg-card text-textSecondary border-border hover:border-neutral-600'
-                                    }
-                                `}
-                            >
-                                {t('long')}
-                            </button>
-                            <button 
-                                onClick={() => { Haptic.tap(); setSide('DOWN'); }}
-                                className={`flex-1 py-1.5 rounded-lg font-bold text-xs transition-all border
-                                    ${side === 'DOWN' 
-                                        ? 'bg-down/10 text-down border border-down' 
-                                        : 'bg-card text-textSecondary border-border hover:border-neutral-600'
-                                    }
-                                `}
-                            >
-                                {t('short')}
-                            </button>
-                         </div>
-                    </div>
+                    {/* Direction moved up */}
                 </div>
 
                 {tradingBlocked && (
@@ -1497,11 +2247,11 @@ const TradingPage: React.FC<TradingPageProps> = ({
                 {orderTypeUI === 'market' ? (
                 <button
                     onClick={handlePreTrade}
-                    disabled={tradingBlocked}
-                    className={`w-full py-2.5 rounded-xl font-bold text-sm uppercase tracking-wide shadow-lg active:scale-95 transition-all mt-3 hover-glow
-                    ${tradingBlocked ? 'bg-neutral-700 text-neutral-500 cursor-not-allowed' : side === 'UP' ? 'bg-neon text-black hover:opacity-90' : 'bg-down text-white hover:opacity-90'}`}
+                    disabled={tradingBlocked || balanceLoading}
+                    className={`w-full h-12 rounded-2xl font-bold text-base shadow-elevation-2 active:scale-[0.98] transition-all mt-3
+                    ${tradingBlocked ? 'bg-neutral-700 text-neutral-500 cursor-not-allowed' : side === 'UP' ? 'bg-up text-black' : 'bg-down text-black'}`}
                 >
-                    {tradingBlocked ? t('trading_blocked') : t('create_deal')}
+                    {tradingBlocked ? t('trading_blocked') : side === 'UP' ? t('open_long') : t('open_short')}
                 </button>
                 ) : (
                 <button
@@ -1657,66 +2407,54 @@ const TradingPage: React.FC<TradingPageProps> = ({
                 </div>
             </div>
 
-            {/* RIGHT COLUMN: Order Book (40%) — скрываем на телефоне (лишнее для минимал UI) */}
-            <div className="hidden lg:flex w-[40%] flex-col bg-card border-l border-border/80">
+            {!isNft ? (
+              /* RIGHT COLUMN: стакан только для крипто/акций — у NFT убираем пустые flex-блоки */
+              <div className="flex w-[44%] lg:w-[44%] min-h-0 flex-col bg-card overflow-y-auto no-scrollbar">
                 <div className="flex justify-between px-3 py-3 text-[9px] text-textSecondary uppercase tracking-wider border-b border-border">
-                    <span>{t('order_book_price')}</span>
-                    <span>{t('order_book_size')}</span>
-                </div>
-                
-                {/* Asks (Red) — минимальные внутренние отступы (data density) */}
-                <div className="flex flex-col-reverse justify-end flex-1 overflow-hidden pb-1 space-y-reverse space-y-[1px]">
-                    {asks.map((ask, i) => (
-                        <div key={`ask-${i}`} className="flex justify-between px-2 py-[2px] relative group cursor-pointer hover-row">
-                            <span className="text-[10px] font-mono text-red-400 relative z-10">
-                              {showAsFxQuote ? formatFxRateQuote(ask.price / rubPerUsd!) : formatPrice(ask.price)}
-                            </span>
-                            <span className="text-[10px] font-mono text-neutral-500 relative z-10">{ask.size.toFixed(3)}</span>
-                            <div className="absolute right-0 top-0 bottom-0 bg-red-500/10 z-0" style={{ width: `${Math.random() * 60}%` }}></div>
-                        </div>
-                    ))}
+                  <span>{t('order_book_price')}</span>
+                  <span>{t('order_book_size')}</span>
                 </div>
 
-                {/* Текущая цена + Flash effect (зелёный/красный затухание 300ms) */}
+                <div className="flex flex-col-reverse justify-end flex-1 overflow-hidden pb-1 space-y-reverse space-y-[1px]">
+                  {asks.map((ask, i) => (
+                    <div key={`ask-${i}`} className="flex justify-between px-2 py-[2px] relative group cursor-pointer hover-row">
+                      <span className="text-[10px] font-mono text-red-400 relative z-10">{formatPrice(ask.price)}</span>
+                      <span className="text-[10px] font-mono text-neutral-500 relative z-10">{ask.size.toFixed(3)}</span>
+                      <div className="absolute right-0 top-0 bottom-0 bg-red-500/10 z-0" style={{ width: `${Math.random() * 60}%` }} />
+                    </div>
+                  ))}
+                </div>
+
                 <div
                   className={`py-2 border-y border-border flex flex-col items-center bg-background my-1 transition-colors duration-200 ${
                     flashDirection === 'up' ? 'animate-flash-up' : flashDirection === 'down' ? 'animate-flash-down' : ''
                   }`}
                 >
-                    <span className={`text-sm font-mono font-bold ${
+                  <span
+                    className={`text-sm font-mono font-bold ${
                       priceDirection === 'up' ? 'text-up' : priceDirection === 'down' ? 'text-down' : 'text-white'
-                    }`}>
-                        {quoteUnavailable
-                          ? '—'
-                          : showAsFxQuote
-                            ? formatFxRateQuote(
-                                (orderBookBase > 0 ? orderBookBase : livePrice) / rubPerUsd!
-                              )
-                            : formatPrice(orderBookBase > 0 ? orderBookBase : livePrice)}
-                    </span>
-                    <span className="text-[8px] text-neutral-500">
-                      {showAsFxQuote ? 'FX' : currencyCode}
-                    </span>
+                    }`}
+                  >
+                    {quoteUnavailable ? '—' : formatPrice(orderBookBase > 0 ? orderBookBase : livePrice)}
+                  </span>
+                  <span className="text-[8px] text-neutral-500">{currencyCode}</span>
                 </div>
 
-                {/* Bids (Green) */}
                 <div className="flex flex-col flex-1 overflow-hidden pt-1 space-y-[1px]">
-                     {bids.map((bid, i) => (
-                        <div key={`bid-${i}`} className="flex justify-between px-2 py-[2px] relative group cursor-pointer hover-row">
-                            <span className="text-[10px] font-mono text-green-400 relative z-10">
-                              {showAsFxQuote ? formatFxRateQuote(bid.price / rubPerUsd!) : formatPrice(bid.price)}
-                            </span>
-                            <span className="text-[10px] font-mono text-neutral-500 relative z-10">{bid.size.toFixed(3)}</span>
-                            <div className="absolute right-0 top-0 bottom-0 bg-green-500/10 z-0" style={{ width: `${Math.random() * 60}%` }}></div>
-                        </div>
-                    ))}
+                  {bids.map((bid, i) => (
+                    <div key={`bid-${i}`} className="flex justify-between px-2 py-[2px] relative group cursor-pointer hover-row">
+                      <span className="text-[10px] font-mono text-green-400 relative z-10">{formatPrice(bid.price)}</span>
+                      <span className="text-[10px] font-mono text-neutral-500 relative z-10">{bid.size.toFixed(3)}</span>
+                      <div className="absolute right-0 top-0 bottom-0 bg-green-500/10 z-0" style={{ width: `${Math.random() * 60}%` }} />
+                    </div>
+                  ))}
                 </div>
-                
-                {/* Order Book Footer */}
-                 <div className="p-2 border-t border-border flex justify-center">
-                    <ChevronDown size={14} className="text-neutral-600" />
+
+                <div className="p-2 border-t border-border flex justify-center">
+                  <ChevronDown size={14} className="text-neutral-600" />
                 </div>
-            </div>
+              </div>
+            ) : null}
         </div>
       </div>
 
@@ -1863,40 +2601,86 @@ const TradingPage: React.FC<TradingPageProps> = ({
             <span className="text-textSecondary">{t('asset')}</span>
             <span className="font-bold text-textPrimary">{asset.ticker}</span>
           </div>
-          {showSpotConfirm === 'buy' && (
-            <>
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-textSecondary">{t('amount_label')}</span>
-                <span className="font-mono text-textPrimary">
-                  {formatPrice(convertToRub(parseFloat(spotAmount.replace(',', '.')) || 0))} {symbol}
-                </span>
-              </div>
-              {livePrice > 0 && (
+          {showSpotConfirm === 'buy' &&
+            (isNft ? (
+              <>
                 <div className="flex justify-between items-center text-sm">
-                  <span className="text-textSecondary">{t('you_receive')}</span>
-                  <span className="font-mono text-neon">
-                    ≈ {(convertToRub(parseFloat(spotAmount.replace(',', '.')) || 0) / livePrice).toFixed(8)} {asset.ticker}
+                  <span className="text-textSecondary">{t('nft_trade_quantity')}</span>
+                  <span className="font-mono text-textPrimary">× {nftBuyCalc.qtyWish}</span>
+                </div>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-textSecondary">{t('nft_trade_unit_price')}</span>
+                  <span className="font-mono text-textPrimary tabular-nums">
+                    {quoteUnavailable ? '—' : `${formatPrice(livePrice)} ${symbol}`}
                   </span>
                 </div>
-              )}
-            </>
-          )}
-          {showSpotConfirm === 'sell' && (
-            <>
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-textSecondary">{asset.ticker} — {t('amount_label')}</span>
-                <span className="font-mono text-textPrimary">{spotQuantity || '0'}</span>
-              </div>
-              {livePrice > 0 && (
                 <div className="flex justify-between items-center text-sm">
-                  <span className="text-textSecondary">{t('you_receive')}</span>
-                  <span className="font-mono text-neon">
-                    ≈ {formatPrice((parseFloat(spotQuantity) || 0) * livePrice)} {symbol}
+                  <span className="text-textSecondary">{t('nft_trade_total')}</span>
+                  <span className="font-mono text-neon tabular-nums">
+                    {quoteUnavailable ? '—' : `${formatPrice(nftBuyCalc.amountRub)} ${symbol}`}
                   </span>
                 </div>
-              )}
-            </>
-          )}
+                {livePrice > 0 && (
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-textSecondary">{t('you_receive')}</span>
+                    <span className="font-mono text-textPrimary">
+                      {t('nft_trade_you_receive_coin', { qty: nftBuyCalc.qtyWish })}
+                    </span>
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-textSecondary">{t('amount_label')}</span>
+                  <span className="font-mono text-textPrimary">
+                    {formatPrice(convertToRub(parseFloat(spotAmount.replace(',', '.')) || 0))} {symbol}
+                  </span>
+                </div>
+                {livePrice > 0 && (
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-textSecondary">{t('you_receive')}</span>
+                    <span className="font-mono text-neon">
+                      ≈ {(convertToRub(parseFloat(spotAmount.replace(',', '.')) || 0) / livePrice).toFixed(8)} {asset.ticker}
+                    </span>
+                  </div>
+                )}
+              </>
+            ))}
+          {showSpotConfirm === 'sell' &&
+            (isNft ? (
+              <>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-textSecondary">{t('nft_trade_quantity')}</span>
+                  <span className="font-mono text-textPrimary">× {nftSellRawWish}</span>
+                </div>
+                {livePrice > 0 ? (
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-textSecondary">{t('you_receive')}</span>
+                    <span className="font-mono text-neon tabular-nums">
+                      ≈ {formatPrice(nftSellProceedsRub)} {symbol}
+                    </span>
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-textSecondary">
+                    {asset.ticker} — {t('amount_label')}
+                  </span>
+                  <span className="font-mono text-textPrimary">{spotQuantity || '0'}</span>
+                </div>
+                {livePrice > 0 ? (
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-textSecondary">{t('you_receive')}</span>
+                    <span className="font-mono text-neon">
+                      ≈ {formatPrice((parseFloat(spotQuantity) || 0) * livePrice)} {symbol}
+                    </span>
+                  </div>
+                ) : null}
+              </>
+            ))}
         </div>
         <BottomSheetFooter
           onCancel={() => setShowSpotConfirm(null)}
@@ -1949,11 +2733,11 @@ const TradingPage: React.FC<TradingPageProps> = ({
                 setShowAssetSearch(false);
               }}
             />
-            <div className="flex-1 min-h-0">
+            <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar scroll-app">
               <CoinsPage
-                onNavigateToTrading={(a) => {
+                onNavigateToTrading={(a, opts) => {
                   Haptic.light();
-                  onChangeAsset?.(a);
+                  onChangeAsset?.(a, opts);
                   setShowAssetSearch(false);
                 }}
               />

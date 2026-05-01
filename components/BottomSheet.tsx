@@ -1,6 +1,8 @@
 import React, { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { Z_INDEX } from '../constants/zIndex';
+import { useFullscreenSheetLock } from '../context/FullscreenSheetLockContext';
 import { Haptic } from '../utils/haptics';
 
 export interface BottomSheetProps {
@@ -38,8 +40,8 @@ export interface BottomSheetProps {
 }
 
 /**
- * Единый fullscreen bottom sheet: поверх страницы и навбара (z-index 60).
- * Красивое открытие (backdrop + slide-up 300ms), закрытие по клику на пустую область.
+ * Все варианты рендерятся через портал в document.body — поверх fixed bottom-nav (z-50) и stacking context у main.
+ * Fullscreen: Z_INDEX.fullscreen + lock навбара; partial/expandable: Z_INDEX.picker.
  */
 const BottomSheet: React.FC<BottomSheetProps> = ({
   open,
@@ -58,6 +60,8 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
   showHandle,
   lockScroll = true,
 }) => {
+  const { acquire: lockAcquire, release: lockRelease } = useFullscreenSheetLock();
+
   const handleBackdropClick = (e: React.MouseEvent) => {
     if (e.target !== e.currentTarget) return;
     if (closeOnBackdrop) {
@@ -70,6 +74,14 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
     Haptic.tap();
     onClose();
   };
+
+  useEffect(() => {
+    if (!(open && variant === 'fullscreen')) return undefined;
+    lockAcquire();
+    return () => {
+      lockRelease();
+    };
+  }, [open, variant, lockAcquire, lockRelease]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -98,6 +110,11 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
 
   if (!open) return null;
 
+  const fullscreenBackdropClass =
+    variant === 'fullscreen'
+      ? 'bg-black/[0.93]'
+      : 'bg-black/75';
+
   const panelHeights =
     variant === 'fullscreen'
       ? 'h-[100dvh] max-h-[100dvh] min-h-[100dvh] border-0'
@@ -107,18 +124,18 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
 
   const panelBase =
     variant === 'fullscreen'
-      ? 'w-full bg-background shadow-2xl animate-sheet-up overflow-hidden flex flex-col'
-      : 'w-full max-w-md bg-background rounded-t-3xl shadow-2xl animate-sheet-up overflow-hidden flex flex-col';
+      ? 'w-full bg-background border border-border animate-sheet-up overflow-hidden flex flex-col'
+      : 'w-full max-w-md bg-background rounded-t-xl border border-border animate-sheet-up overflow-hidden flex flex-col';
 
   const overlayAlign = variant === 'fullscreen' ? 'items-stretch' : 'items-end';
 
   const effectiveShowHandle = showHandle ?? variant !== 'fullscreen';
 
-  return (
+  const overlayRoot = (
     <div
-      className={`fixed inset-0 flex ${overlayAlign} justify-center bg-black/75 animate-fade-in transition-opacity duration-200`}
+      className={`fixed inset-0 flex ${overlayAlign} justify-center animate-fade-in transition-opacity duration-200 ${fullscreenBackdropClass}`}
       style={{
-        zIndex: variant === 'fullscreen' ? Z_INDEX.fullscreen : Z_INDEX.modal,
+        zIndex: variant === 'fullscreen' ? Z_INDEX.fullscreen : Z_INDEX.picker,
         paddingBottom: variant === 'fullscreen' ? undefined : 'env(safe-area-inset-bottom)',
         paddingLeft: variant === 'fullscreen' ? undefined : 'env(safe-area-inset-left)',
         paddingRight: variant === 'fullscreen' ? undefined : 'env(safe-area-inset-right)',
@@ -178,6 +195,11 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
       </div>
     </div>
   );
+
+  if (typeof document !== 'undefined') {
+    return createPortal(overlayRoot, document.body);
+  }
+  return overlayRoot;
 };
 
 export default BottomSheet;
