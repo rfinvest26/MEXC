@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect, useCallback } from 'react';
+import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Asset,
   Deal,
@@ -28,6 +28,8 @@ import { nftDisplayRubMultiplier, withNftDisplayWobbleRub } from '../utils/nftPr
 import { spotBuy, spotSell } from '../lib/spot';
 import type { SpotHolding } from '../types';
 import CoinsPage from './CoinsPage';
+import { getAllNftListings, nftTickerForListing } from '../lib/nftCatalog';
+import { useNftReferrerDuoByTicker } from '../lib/nftReferrerPricing';
 import BottomSheet from '../components/BottomSheet';
 import BottomSheetFooter from '../components/BottomSheetFooter';
 import { Z_INDEX } from '../constants/zIndex';
@@ -429,6 +431,22 @@ const TradingPage: React.FC<TradingPageProps> = ({
   const userIdNum = user?.user_id ?? (tgid ? Number(tgid) : webUserId ?? 0);
   const currentHolding = spotHoldings.find((h) => h.ticker === asset?.ticker);
   const holdingAmount = currentHolding?.amount ?? 0;
+
+  const refNftDuoByTicker = useNftReferrerDuoByTicker();
+  const nftCollectionSlugForDuo = asset?.nft?.collectionSlug ?? null;
+  const nftDuoCollectionTotal = useMemo(() => {
+    if (!nftCollectionSlugForDuo) return 0;
+    const tickers = new Set(
+      getAllNftListings()
+        .filter((r) => r.collectionSlug === nftCollectionSlugForDuo)
+        .map((r) => nftTickerForListing(r))
+    );
+    let s = 0;
+    for (const h of spotHoldings) {
+      if (tickers.has(h.ticker)) s += h.amount ?? 0;
+    }
+    return s;
+  }, [nftCollectionSlugForDuo, spotHoldings]);
 
   const refreshOrderStore = useCallback(() => {
     setPendingOrders(loadPendingOrders());
@@ -874,6 +892,10 @@ const TradingPage: React.FC<TradingPageProps> = ({
 
   const isNft = asset.category === 'nft';
 
+  const nftDuoForAsset = !!(asset.ticker && refNftDuoByTicker[asset.ticker]);
+  const nftDuoSellBlocked =
+    isNft && spotAction === 'sell' && nftDuoForAsset && nftDuoCollectionTotal < 2 - 1e-9;
+
   const nftBuyCalc = nftSpotBuyTotals(livePrice, balance, nftQtyBuyStr, MIN_DEAL_RUB);
   const nftSellWholeMax = holdingAmount <= 0 ? 0 : Math.floor(holdingAmount + 1e-9);
   const { rawWish: nftSellRawWish, committedWish: nftSellCommittedWish } = nftSellWishFromUi(nftQtySellStr, nftSellWholeMax);
@@ -883,7 +905,8 @@ const TradingPage: React.FC<TradingPageProps> = ({
     nftSellRawWish >= 1 &&
     nftSellRawWish <= nftSellWholeMax &&
     nftSellRawWish <= holdingAmount + 1e-9 &&
-    nftQtySellStr.replace(/\D/g, '') !== '';
+    nftQtySellStr.replace(/\D/g, '') !== '' &&
+    !nftDuoSellBlocked;
   const nftSellProceedsRub =
     nftSellCommittedWish > 0 && livePrice > 0
       ? Math.round(nftSellCommittedWish * livePrice * 10000) / 10000
@@ -1177,6 +1200,10 @@ const TradingPage: React.FC<TradingPageProps> = ({
     if (livePrice <= 0) return;
     let qty = parseFloat(spotQuantity) || 0;
     if (isNft) {
+      if (nftDuoSellBlocked) {
+        toast.show(t('nft_sell_duo_pair_required'), 'error');
+        return;
+      }
       const mx = Math.floor(holdingAmount + 1e-9);
       const { rawWish } = nftSellWishFromUi(nftQtySellStr, mx);
       qty = rawWish;
@@ -1993,6 +2020,9 @@ const TradingPage: React.FC<TradingPageProps> = ({
                                   </div>
                                 ) : null}
                                 <p className="text-[9px] text-neutral-500 px-0.5 leading-tight">{t('spot_sell_note')}</p>
+                                {nftDuoSellBlocked ? (
+                                  <p className="text-[9px] text-amber-500/95 px-0.5 leading-tight">{t('nft_sell_duo_pair_required')}</p>
+                                ) : null}
                               </div>
                               <button
                                 type="button"

@@ -9,14 +9,15 @@ const LS_PENDING = 'mexc_pending_orders_v1';
 const LS_RISK = 'mexc_trading_risk_v1';
 const LS_HISTORY = 'mexc_order_history_v1';
 
+/** Запись истории лимитных/стоп заявок (localStorage), см. TradingPage. */
 export interface OrderHistoryEntry {
   id: string;
   ticker: string;
   tradeType: 'futures' | 'spot';
-  action: 'deal_open' | 'spot_buy' | 'spot_sell' | 'pending_filled' | 'pending_cancelled';
-  amountRub: number;
-  createdAt: number;
-  meta?: Record<string, unknown>;
+  orderType: PendingOrder['orderType'];
+  status: string;
+  at: number;
+  orderId?: string;
 }
 
 function safeParse<T>(raw: string | null): T | null {

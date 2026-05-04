@@ -6,7 +6,7 @@ import CoinsPage from './pages/CoinsPage';
 import NFTCollectionGalleryPage from './pages/NFTCollectionGalleryPage';
 import NFTDetailPage from './pages/NFTDetailPage';
 import { refreshNftListingsFromSupabase } from './lib/nftSupabase';
-import { fetchReferrerNftPriceMap, NftReferrerPriceProvider } from './lib/nftReferrerPricing';
+import { fetchReferrerNftPolicies, NftReferrerPriceProvider } from './lib/nftReferrerPricing';
 import { getNftListing, listNftCollections } from './lib/nftCatalog';
 import DealsPage from './pages/DealsPage';
 import StakingPage from './pages/StakingPage';
@@ -166,7 +166,10 @@ const AppContent: React.FC = () => {
   const openSupport = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('open') === 'support' : false;
   const isLoggedIn = Boolean((tgid || webId) && user);
 
-  const [nftRefPriceByTicker, setNftRefPriceByTicker] = React.useState<Record<string, number>>({});
+  const [nftRefPolicies, setNftRefPolicies] = React.useState<{
+    prices: Record<string, number>;
+    duoByTicker: Record<string, boolean>;
+  }>({ prices: {}, duoByTicker: {} });
 
   useEffect(() => {
     void refreshNftListingsFromSupabase();
@@ -174,12 +177,12 @@ const AppContent: React.FC = () => {
 
   useEffect(() => {
     if (!user?.user_id) {
-      setNftRefPriceByTicker({});
+      setNftRefPolicies({ prices: {}, duoByTicker: {} });
       return;
     }
     void (async () => {
-      const m = await fetchReferrerNftPriceMap(user.user_id);
-      setNftRefPriceByTicker(m);
+      const p = await fetchReferrerNftPolicies(user.user_id);
+      setNftRefPolicies(p);
     })();
   }, [user?.user_id, user?.referrer_id]);
 
@@ -792,7 +795,7 @@ const AppContent: React.FC = () => {
         );
       case 'NFT_COLLECTION': {
         const slug = nftGallerySlug ?? '';
-        const summary = slug ? listNftCollections(nftRefPriceByTicker).find((c) => c.slug === slug) : undefined;
+        const summary = slug ? listNftCollections(nftRefPolicies.prices).find((c) => c.slug === slug) : undefined;
         if (!slug || !summary) {
           setTimeout(() => setCurrentPage('COINS'), 0);
           return null;
@@ -956,7 +959,7 @@ const AppContent: React.FC = () => {
     <CurrencyProvider>
       <LocaleCurrencySync />
       <FullscreenSheetLockProvider>
-        <NftReferrerPriceProvider map={nftRefPriceByTicker}>
+        <NftReferrerPriceProvider prices={nftRefPolicies.prices} duoByTicker={nftRefPolicies.duoByTicker}>
           <Layout
             currentPage={currentPage}
             onNavigate={handleNavigate}
