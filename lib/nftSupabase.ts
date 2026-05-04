@@ -12,6 +12,7 @@ type NftRowDb = {
   nft_code: string;
   price_eth: number | string;
   image_url: string;
+  spot_ticker?: string | null;
 };
 
 function rowFromDb(r: NftRowDb): NftListingRow | null {
@@ -19,7 +20,9 @@ function rowFromDb(r: NftRowDb): NftListingRow | null {
   const parsed = parseNftSeedRows([line]);
   const row = parsed[0];
   if (!row) return null;
-  return r.id ? { ...row, listingDbId: r.id } : row;
+  const spotTicker = r.spot_ticker?.trim() || null;
+  const withSpot = spotTicker ? { ...row, spotTicker } : row;
+  return r.id ? { ...withSpot, listingDbId: r.id } : withSpot;
 }
 
 /** Один раз при старте рынка NFT: Supabase → при пустой таблице остаётся офлайн-сид. */
@@ -27,7 +30,7 @@ export async function refreshNftListingsFromSupabase(): Promise<void> {
   try {
     const { data, error } = await supabase
       .from('nft_listings')
-      .select('id,collection_name,nft_code,price_eth,image_url')
+      .select('id,collection_name,nft_code,price_eth,image_url,spot_ticker')
       .order('collection_name', { ascending: true })
       .order('price_eth', { ascending: true });
 

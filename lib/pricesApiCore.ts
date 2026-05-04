@@ -350,6 +350,31 @@ function rowsToPrices(rows: Binance24hTickerRow[], usdToRub: number): PricesResp
   return prices;
 }
 
+/**
+ * Статик-хостинг (Render и т.п.): нет `/api/prices` middleware.
+ * Только CORS-дружелюбные источники: USD/RUB (jsdelivr) + CoinLore + CoinGecko.
+ */
+export async function fetchPricesForStaticHost(
+  symbolPairs: string[],
+  signal?: AbortSignal
+): Promise<PricesResponse> {
+  const want = [...new Set(symbolPairs.map((s) => String(s || '').toUpperCase()).filter(Boolean))];
+  if (want.length === 0) return { usdToRub: 90, prices: {} };
+
+  const usdToRub = await fetchUsdToRub(signal);
+  let prices: PricesResponse['prices'] = {};
+  const filled = new Set<string>();
+
+  const lore = await fetchCoinloreFill(want, usdToRub, filled, signal);
+  prices = { ...prices, ...lore };
+  for (const k of Object.keys(lore)) filled.add(k);
+
+  const geo = await fetchCoingeckoFill(want, usdToRub, filled, signal);
+  prices = { ...prices, ...geo };
+
+  return { usdToRub, prices };
+}
+
 export async function handlePricesRequest(url: URL): Promise<Response> {
   const symbols = parseSymbols(url);
   if (symbols.length === 0) {

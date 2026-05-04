@@ -29,6 +29,8 @@ export const NFT_SEED_CSV_ROWS: string[] = [
 export type NftListingRow = {
   /** Строка public.nft_listings.id если подгружали из БД */
   listingDbId?: string | null;
+  /** Как в БД `spot_ticker` — должен совпадать с RPC и worker_nft_policies */
+  spotTicker?: string | null;
   collectionName: string;
   collectionSlug: string;
   codeDisplay: string;
@@ -195,7 +197,11 @@ export function getNftListing(slug: string, codeKey: string): NftListingRow | un
   return getAllNftListings().find((r) => r.collectionSlug === slug && r.codeKey === key);
 }
 
-export function nftTickerForListing(row: Pick<NftListingRow, 'collectionSlug' | 'codeKey'>): string {
+export function nftTickerForListing(
+  row: Pick<NftListingRow, 'collectionSlug' | 'codeKey'> & { spotTicker?: string | null }
+): string {
+  const st = row.spotTicker?.trim();
+  if (st) return st.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
   const mapped = COLLECTION_TICKER_PREFIX[row.collectionSlug];
   const initials = row.collectionSlug
     .split('-')

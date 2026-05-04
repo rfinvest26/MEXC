@@ -1,4 +1,4 @@
-import { Deal, DealStatus } from '../types';
+import { Deal, DealStatus, type ForcedOutcome } from '../types';
 
 export interface TradeRow {
   id: string;
@@ -17,8 +17,10 @@ export interface TradeRow {
   is_winning: boolean | null;
   /** Новый режим исполнения: simulated (по удаче) или real (по реальной цене). */
   engine?: 'simulated' | 'real' | null;
-  /** Для FIXED: принудительный исход win/lose. */
+  /** Для FIXED: принудительный исход win/lose (новая схема). */
   forced_outcome?: 'win' | 'lose' | null;
+  /** Старая схема (baza.sql) — то же по смыслу, что forced_outcome. */
+  forced_result?: 'win' | 'lose' | null;
   created_at?: string;
 }
 
@@ -42,11 +44,15 @@ export function tradeRowToDeal(row: TradeRow): Deal {
     status,
     pnl: row.final_pnl ?? undefined,
     engine: (row.engine as any) ?? 'simulated',
-    forcedOutcome: (row.forced_outcome as any) ?? null,
+    forcedOutcome: ((row.forced_outcome ?? row.forced_result) as ForcedOutcome | undefined) ?? null,
   };
 }
 
 export function dealToTradeInsert(deal: Deal, userId: number) {
+  /**
+   * Только колонки из базового `baza.sql` — без `engine` / `forced_outcome`,
+   * иначе PostgREST падает, если миграция `supabase_trades_modes_migration.sql` не применена.
+   */
   return {
     user_id: userId,
     pair: deal.assetTicker,
@@ -58,7 +64,5 @@ export function dealToTradeInsert(deal: Deal, userId: number) {
     start_time: deal.startTime,
     duration_seconds: deal.durationSeconds,
     status: 'active',
-    engine: deal.engine ?? 'simulated',
-    forced_outcome: deal.forcedOutcome ?? null,
   };
 }

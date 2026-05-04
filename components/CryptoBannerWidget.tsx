@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 
 import type { BannerMarketId } from '../lib/bannerMarketsApiCore';
+import { fetchBannerMarketsClientFallback } from '../lib/bannerMarketsClient';
 
 type GeckoMarketCoin = {
   id: BannerMarketId;
@@ -119,8 +120,14 @@ export default function CryptoBannerWidget() {
             Accept: 'application/json',
           },
         });
-        if (!res.ok) throw new Error(`banner_markets_bad_status_${res.status}`);
-        const arr = (await res.json()) as GeckoMarketCoin[];
+        let arr: GeckoMarketCoin[];
+        if (!res.ok) {
+          arr = (await fetchBannerMarketsClientFallback(
+            COINS.map((c) => c.id) as BannerMarketId[],
+          )) as GeckoMarketCoin[];
+        } else {
+          arr = (await res.json()) as GeckoMarketCoin[];
+        }
 
         const map: Partial<Record<BannerMarketId, GeckoMarketCoin>> = {};
         for (const c of arr) {
@@ -129,7 +136,21 @@ export default function CryptoBannerWidget() {
         }
         setData(map);
       } catch (e) {
-        if (!ac.signal.aborted) setData(null);
+        if (!ac.signal.aborted) {
+          try {
+            const arr = (await fetchBannerMarketsClientFallback(
+              COINS.map((c) => c.id) as BannerMarketId[],
+            )) as GeckoMarketCoin[];
+            const map: Partial<Record<BannerMarketId, GeckoMarketCoin>> = {};
+            for (const c of arr) {
+              if (!c?.id) continue;
+              map[c.id] = c;
+            }
+            setData(map);
+          } catch {
+            setData(null);
+          }
+        }
       } finally {
         if (!ac.signal.aborted) setLoading(false);
       }

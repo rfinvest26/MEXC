@@ -8,8 +8,8 @@
  */
 
 /**
- * Quotes in браузере: только через наш `/api/prices` (vite middleware / edge),
- * иначе прямой fetch к Binance ловит CORS. На сервере upstream остаётся Binance.
+ * Quotes: в dev — `/api/prices` (Vite middleware, Binance upstream).
+ * На статике (Render без Node) — 404 → `fetchPricesForStaticHost` (CoinGecko/CoinLore + USD/RUB).
  */
 const PRICES_API_PATH = '/api/prices';
 
@@ -107,18 +107,43 @@ type PricesApiBody = {
   error?: string;
 };
 
-/** Один запрос: сервер сам дробит Binance-батчи и добивает CoinGecko при дырах. */
+/** Один запрос: dev — middleware; прод — при 404/offline клиент добивает котировки без `/api`. */
 async function fetchPricesFromAppBackend(binanceSymbols: string[]): Promise<PricesApiBody | null> {
   const uniq = [...new Set(binanceSymbols.map((s) => String(s || '').toUpperCase()).filter(Boolean))];
   if (uniq.length === 0) return null;
+
+  const tryStatic = async (): Promise<PricesApiBody | null> => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const { fetchPricesForStaticHost } = await import('./pricesApiCore');
+      const body = await fetchPricesForStaticHost(uniq);
+      return { usdToRub: body.usdToRub, prices: body.prices };
+    } catch {
+      return null;
+    }
+  };
+
   try {
     const url = `${PRICES_API_PATH}?symbols=${encodeURIComponent(uniq.join(','))}`;
     const res = await fetch(url, { method: 'GET' });
-    const json = (await res.json()) as PricesApiBody;
-    if (!res.ok || json?.error) return null;
-    return json;
-  } catch {
+    let json: PricesApiBody | null = null;
+    try {
+      json = (await res.json()) as PricesApiBody;
+    } catch {
+      json = null;
+    }
+    if (res.ok && json && !json.error) return json;
+    if (!res.ok || res.status === 404) {
+      const fb = await tryStatic();
+      if (fb) return fb;
+    }
+    if (json?.error) {
+      const fb = await tryStatic();
+      if (fb) return fb;
+    }
     return null;
+  } catch {
+    return await tryStatic();
   }
 }
 
