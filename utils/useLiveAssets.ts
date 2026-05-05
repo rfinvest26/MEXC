@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Asset } from '../types';
-import { fetchAssetPricesInRub, getCachedPrices, isCacheExpired } from '../lib/cryptoPrices';
+import { fetchAssetPricesInRub, getCachedPrices } from '../lib/cryptoPrices';
 
 const DEFAULT_FETCH_INTERVAL_MS = 10_000;
 
@@ -73,10 +73,8 @@ export function useLiveAssets(baseAssets: Asset[], options?: { intervalMs?: numb
       }
     };
 
-    // Обновляем сразу только если кеш устарел, иначе показываем кеш мгновенно
-    if (isCacheExpired()) {
-      update();
-    }
+    // Всегда обновляем при маунте — кеш показан мгновенно, но свежие данные важны
+    update();
 
     const intervalMs =
       typeof options?.intervalMs === 'number' && Number.isFinite(options.intervalMs) && options.intervalMs > 250

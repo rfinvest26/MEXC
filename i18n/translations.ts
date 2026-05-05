@@ -268,7 +268,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     nft_orders_market_only: 'NFT orders are market-only in this catalogue flow.',
     markets_nft_search_code_placeholder: 'Search by NFT # (e.g. 7986)',
     nft_sell_duo_pair_required:
-      'Selling this NFT requires a pair set by your referrer: hold at least two NFT from this collection before you can sell.',
+      'To sell this NFT you need a pair: keep at least two NFTs from this collection in your spot portfolio. Buy a second one, then you can sell.',
     nft_spot_error_anchor: 'NFT quote is not ready yet — wait for the price to load and try again.',
     nft_spot_error_price_mismatch: 'Price no longer matches the catalogue (±3%). Refresh the page and try again.',
     nft_spot_error_qty: 'NFT quantity must be a whole number of pieces.',
@@ -954,7 +954,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     nft_orders_market_only: 'Для NFT доступны только рыночные заявки в этом сценарии.',
     markets_nft_search_code_placeholder: 'Поиск по номеру NFT (например 7986)',
     nft_sell_duo_pair_required:
-      'Для продажи этого NFT воркер включил пару: держите минимум два NFT из этой коллекции — купите второй, затем можно продавать.',
+      'Чтобы продать этот NFT, нужна пара: в спот-портфеле должно быть не меньше двух NFT из этой коллекции. Купите второй лот — после этого продажа станет доступна.',
     nft_spot_error_anchor: 'Котировка NFT ещё не готова — подождите загрузки цены и повторите.',
     nft_spot_error_price_mismatch: 'Цена не совпадает с каталогом (±3%). Обновите страницу и попробуйте снова.',
     nft_spot_error_qty: 'Количество NFT должно быть целым числом лотов.',
@@ -1916,7 +1916,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     nft_orders_market_only: 'NFT — tylko zlecenia rynkowe w tym przepływie.',
     markets_nft_search_code_placeholder: 'Szukaj po # NFT (np. 7986)',
     nft_sell_duo_pair_required:
-      'Sprzedaż wymaga pary ustawionej przez opiekuna: minimalnie dwa NFT z tej kolekcji.',
+      'Aby sprzedać to NFT, potrzebujesz pary: miej co najmniej dwa NFT z tej kolekcji na koncie spot. Kup drugi, wtedy sprzedaż będzie możliwa.',
     nft_spot_error_anchor: 'Kurs NFT jeszcze się ładuje — poczekaj i spróbuj ponownie.',
     nft_spot_error_price_mismatch: 'Cena nie zgadza się z katalogiem (±3%). Odśwież stronę.',
     nft_spot_error_qty: 'Ilość NFT musi być liczbą całkowitą.',
@@ -2349,7 +2349,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     nft_orders_market_only: 'NFT – pouze market příkazy v tomto catalogu.',
     markets_nft_search_code_placeholder: 'Hledat podle # NFT (např. 7986)',
     nft_sell_duo_pair_required:
-      'Prodej vyžaduje pár od referenta: držte alespoň dvě NFT z této kolekce.',
+      'K prodeji tohoto NFT je potřeba pár: drž alespoň dvě NFT z této kolekce ve spotu. Kup druhé, pak půjde prodat.',
     nft_spot_error_anchor: 'Kurz NFT se ještě načítá — počkej a zkus znovu.',
     nft_spot_error_price_mismatch: 'Cena nesedí s katalogem (±3%). Obnov stránku.',
     nft_spot_error_qty: 'Počet NFT musí být celé číslo.',

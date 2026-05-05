@@ -16,11 +16,21 @@ function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+const FINNHUB_FETCH_TIMEOUT_MS = 8_000;
+
 export async function fetchFinnhubQuote(symbol: string): Promise<FinnhubQuoteJson | null> {
   const s = String(symbol || '').trim().toUpperCase();
   if (!s) return null;
   const url = `${FINNHUB_BASE}/quote?symbol=${encodeURIComponent(s)}&token=${encodeURIComponent(FINNHUB_API_KEY)}`;
-  const doFetch = async (): Promise<Response> => fetch(url);
+  const doFetch = async (): Promise<Response> => {
+    const ac = new AbortController();
+    const tid = setTimeout(() => ac.abort(), FINNHUB_FETCH_TIMEOUT_MS);
+    try {
+      return await fetch(url, { signal: ac.signal });
+    } finally {
+      clearTimeout(tid);
+    }
+  };
   try {
     let res = await doFetch();
     if (res.status === 429) {

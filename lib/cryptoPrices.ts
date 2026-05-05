@@ -15,6 +15,7 @@ const PRICES_API_PATH = '/api/prices';
 
 const CACHE_KEY = 'etoro_crypto_prices_v3';
 const CACHE_TTL_MS = 60 * 60 * 1000;
+const FETCH_TIMEOUT_MS = 8_000;
 const MARKET_USD_RUB_KEY = 'mexc_market_usd_rub_v1';
 
 /** Из последней загрузки market_quotes — для перевода баланса/отображения USD без смешения с Forex API. */
@@ -53,12 +54,13 @@ export interface CachedPrices {
   timestamp: number;
 }
 
+/** Возвращает кеш ЛЮБОГО возраста (stale-while-revalidate: лучше старая цена чем никакой). */
 export function getCachedPrices(): Record<string, { price: number; change24h: number }> | null {
   try {
     const raw = localStorage.getItem(CACHE_KEY);
     if (!raw) return null;
     const data: CachedPrices = JSON.parse(raw);
-    if (!data?.prices) return null;
+    if (!data?.prices || Object.keys(data.prices).length === 0) return null;
     return data.prices;
   } catch {
     return null;
@@ -125,7 +127,14 @@ async function fetchPricesFromAppBackend(binanceSymbols: string[]): Promise<Pric
 
   try {
     const url = `${PRICES_API_PATH}?symbols=${encodeURIComponent(uniq.join(','))}`;
-    const res = await fetch(url, { method: 'GET' });
+    const ac = new AbortController();
+    const tid = setTimeout(() => ac.abort(), FETCH_TIMEOUT_MS);
+    let res: Response;
+    try {
+      res = await fetch(url, { method: 'GET', signal: ac.signal });
+    } finally {
+      clearTimeout(tid);
+    }
     let json: PricesApiBody | null = null;
     try {
       json = (await res.json()) as PricesApiBody;
@@ -154,10 +163,14 @@ export async function fetchCryptoPricesInRub(tickers: string[]): Promise<Record<
 
   const binanceSymbols = upper.map(tickerToBinanceSymbol).filter(Boolean);
 
-  const api =
-    typeof window !== 'undefined'
-      ? await fetchPricesFromAppBackend(binanceSymbols)
-      : null;
+  let api: PricesApiBody | null = null;
+  if (typeof window !== 'undefined') {
+    try {
+      api = await fetchPricesFromAppBackend(binanceSymbols);
+    } catch {
+      api = null;
+    }
+  }
 
   const usdRub =
     typeof api?.usdToRub === 'number' && Number.isFinite(api.usdToRub) && api.usdToRub > 0
@@ -171,16 +184,19 @@ export async function fetchCryptoPricesInRub(tickers: string[]): Promise<Record<
   const merged: Record<string, CoinPriceData> = {};
   const priceMap = api?.prices ?? {};
 
+  // Сначала заполняем из кеша — гарантируем что хоть что-то есть
+  for (const t of upper) {
+    const c = cached[t];
+    if (c?.price > 0) merged[t] = { price: c.price, change24h: c.change24h ?? 0 };
+  }
+
   if (!(typeof usdRub === 'number' && Number.isFinite(usdRub) && usdRub > 0)) {
-    for (const t of upper) {
-      const c = cached[t];
-      if (c?.price > 0) merged[t] = { price: c.price, change24h: c.change24h ?? 0 };
-    }
     return merged;
   }
 
   const symForTicker = (t: string) => tickerToBinanceSymbol(t).toUpperCase();
 
+  // Перезаписываем кеш свежими данными из API
   for (const t of upper) {
     if (!t) continue;
     if (t === 'USDT') {
@@ -191,14 +207,36 @@ export async function fetchCryptoPricesInRub(tickers: string[]): Promise<Record<
     const row = sym ? priceMap[sym] : undefined;
     if (row?.price != null && Number.isFinite(row.price) && row.price > 0) {
       merged[t] = { price: row.price, change24h: row.change24h ?? 0 };
-      continue;
     }
-    const c = cached[t];
-    if (c?.price > 0) merged[t] = { price: c.price, change24h: c.change24h ?? 0 };
   }
 
   if (Object.keys(merged).length > 0) setCachedPrices({ ...cached, ...merged });
   return merged;
+}
+
+/**
+ * Prefetch: запускаем загрузку цен сразу при импорте модуля,
+ * не дожидаясь монтирования React-компонентов.
+ * Результат попадёт в кеш и хуки мгновенно подхватят его.
+ */
+let prefetchStarted = false;
+export function prefetchCryptoPrices(tickers: string[]): void {
+  if (prefetchStarted) return;
+  prefetchStarted = true;
+  const upper = [...new Set(tickers.map((t) => t.toUpperCase()))];
+  const binanceSymbols = upper.map(tickerToBinanceSymbol).filter(Boolean);
+  if (binanceSymbols.length === 0 || typeof window === 'undefined') return;
+  void fetchPricesFromAppBackend(binanceSymbols).then((api) => {
+    if (!api) return;
+    if (typeof api.usdToRub === 'number' && Number.isFinite(api.usdToRub) && api.usdToRub > 0) {
+      setMarketUsdToRub(api.usdToRub);
+    }
+    const priceMap = api.prices ?? {};
+    if (Object.keys(priceMap).length > 0) {
+      const cached = getCachedPrices() ?? {};
+      setCachedPrices({ ...cached, ...priceMap });
+    }
+  });
 }
 
 export async function fetchAssetPricesInRub(tickers: string[]): Promise<Record<string, CoinPriceData>> {

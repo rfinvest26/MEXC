@@ -21,7 +21,8 @@ function readStockCache(): Record<string, { price: number; change24h: number; vo
     const raw = localStorage.getItem(STOCK_CACHE_KEY);
     if (!raw) return null;
     const data = JSON.parse(raw) as StockCache;
-    if (!data?.prices || Date.now() - data.timestamp > STOCK_CACHE_TTL_MS) return null;
+    if (!data?.prices || Object.keys(data.prices).length === 0) return null;
+    // stale-while-revalidate: возвращаем кеш любого возраста — лучше старая цена чем никакой
     return data.prices;
   } catch {
     return null;
@@ -133,6 +134,8 @@ export function useLiveStockAssets(
       let rub = resolveRubPerUsd(rubOptRef.current);
       if (rub != null && rub > 0) lastGoodRubRef.current = rub;
       else rub = lastGoodRubRef.current;
+
+      // Если нет курса RUB/USD — не можем обновить, но кеш уже показан при маунте
       if (rub == null || !(rub > 0)) return;
 
       const priceMap: Record<string, { price: number; change24h: number; unavailable: boolean }> = {};

@@ -22,6 +22,7 @@ import type { SpotHolding } from './types';
 import type { StakingPosition, StakingRate } from './types';
 import { MOCK_ASSETS, MARKET_ASSETS } from './constants';
 import { useLiveAssets } from './utils/useLiveAssets';
+import { prefetchCryptoPrices } from './lib/cryptoPrices';
 import { Haptic } from './utils/haptics';
 import { useUser } from './context/UserContext';
 import { usePin } from './context/PinContext';
@@ -47,6 +48,9 @@ import { FullscreenSheetLockProvider } from './context/FullscreenSheetLockContex
 import { useWebAuth } from './context/WebAuthContext';
 import { PasswordChangeProvider, usePasswordChange } from './context/PasswordChangeContext';
 import Modal from './components/Modal';
+
+// Prefetch: запускаем загрузку цен ДО монтирования React — кеш заполнится быстрее
+prefetchCryptoPrices(MARKET_ASSETS.map((a) => a.ticker));
 
 /** Синхронизирует язык и валюту с данными пользователя */
 function LocaleCurrencySync() {
@@ -161,6 +165,8 @@ const AppContent: React.FC = () => {
   /** Навигация NFT: галерея коллекции → карточка → спот */
   const [nftGallerySlug, setNftGallerySlug] = useState<string | null>(null);
   const [nftDetailCodeKey, setNftDetailCodeKey] = useState<string | null>(null);
+  /** Ссылка из бота: ?nft_slug=…&nft_code=… (один раз за сессию) */
+  const nftDeepLinkConsumed = React.useRef(false);
 
   const refId = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('ref') : null;
   const openSupport = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('open') === 'support' : false;
@@ -174,6 +180,25 @@ const AppContent: React.FC = () => {
   useEffect(() => {
     void refreshNftListingsFromSupabase();
   }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || nftDeepLinkConsumed.current) return;
+    if (loading) return;
+    try {
+      const p = new URLSearchParams(window.location.search);
+      const ns = (p.get('nft_slug') || '').trim().toLowerCase();
+      const nc = (p.get('nft_code') || '').trim().replace(/^#/i, '');
+      if (!ns || !nc) return;
+      const row = getNftListing(ns, nc);
+      if (!row) return;
+      nftDeepLinkConsumed.current = true;
+      setNftGallerySlug(ns);
+      setNftDetailCodeKey(nc);
+      setCurrentPage('NFT_ITEM');
+    } catch {
+      /* ignore malformed query */
+    }
+  }, [loading]);
 
   useEffect(() => {
     if (!user?.user_id) {
