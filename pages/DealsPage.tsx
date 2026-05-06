@@ -337,7 +337,7 @@ const DealsPage: React.FC<DealsPageProps> = ({
       </header>
 
       {/* Контент */}
-      <div className="flex-1 overflow-y-auto overflow-x-auto no-scrollbar pb-24">
+      <div className="flex-1 overflow-y-auto overflow-x-auto no-scrollbar pb-8">
         {/* ——— Активные сделки ——— */}
         {activeTab === 'ACTIVE' && (
           <div className="px-4 py-3">

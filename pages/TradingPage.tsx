@@ -211,7 +211,7 @@ function ChartToolbar(props: {
   return (
     <div
       className={`bg-background/80 backdrop-blur-sm border-b border-border/40 px-4 py-2 flex items-center gap-2 transition-all duration-300 ${
-        isFullscreen ? 'fixed top-0 left-0 right-0' : 'absolute top-0 left-0 right-0 z-20'
+        isFullscreen ? 'fixed top-0 left-0 right-0' : 'relative z-20'
       }`}
       style={isFullscreen ? { zIndex: Z_INDEX.fullscreen + 1 } : undefined}
     >
@@ -1420,8 +1420,8 @@ const TradingPage: React.FC<TradingPageProps> = ({
 
             {/* График: edge-to-edge контейнер */}
             <div
-              className={`relative w-full bg-[#131722] overflow-hidden flex-1 min-h-[360px] md:min-h-[480px] lg:min-h-[560px] ${
-                isFullscreen ? 'fixed inset-0 chart-fullscreen transition-all duration-300' : ''
+              className={`relative w-full bg-[#131722] overflow-hidden flex-1 min-h-[280px] md:min-h-[360px] lg:min-h-[420px] ${
+                isFullscreen ? 'fixed inset-0 chart-fullscreen transition-all duration-300 pt-12' : ''
               }`}
               style={
                 isFullscreen
@@ -1431,7 +1431,7 @@ const TradingPage: React.FC<TradingPageProps> = ({
             >
               {/* Watermark */}
               <div
-                className="absolute flex items-center justify-center pointer-events-none select-none z-20 left-0 right-0 top-12 bottom-0"
+                className="absolute flex items-center justify-center pointer-events-none select-none z-20 left-0 right-0 top-0 bottom-0"
                 aria-hidden
               >
                 <span
@@ -1444,7 +1444,7 @@ const TradingPage: React.FC<TradingPageProps> = ({
               {/* Skeleton */}
               {!chartLoaded && (
                 <div
-                  className="absolute flex items-center justify-center pointer-events-none z-20 left-0 right-0 top-12 bottom-0"
+                  className="absolute flex items-center justify-center pointer-events-none z-20 left-0 right-0 top-0 bottom-0"
                   aria-hidden
                 >
                   <div className="relative w-full h-full opacity-[0.04] animate-pulse">
@@ -1487,7 +1487,7 @@ const TradingPage: React.FC<TradingPageProps> = ({
 
               {/* Embed */}
               <div
-                className={`absolute z-10 transition-all left-0 right-0 top-12 bottom-0 ${
+                className={`absolute z-10 transition-all left-0 right-0 top-0 bottom-0 ${
                   chartAnimMode === 'fade' ? 'duration-150' : 'duration-200'
                 } ease-[cubic-bezier(0.4,0,0.2,1)] ${
                   chartAnimMode === 'slide' ? 'translate-y-[8px]' : ''
@@ -1505,69 +1505,57 @@ const TradingPage: React.FC<TradingPageProps> = ({
               </div>
             </div>
 
-            {/* Bottom info row (compact, stays visible) */}
+            {/* Combined bottom section with grid layout */}
             {!isFullscreen && (
-              <div className="w-full px-4 py-2 border-t border-border/40 bg-background/90 backdrop-blur overflow-hidden relative z-30">
-                <div className="flex items-center gap-5 overflow-x-auto no-scrollbar">
-                  <div className="min-w-[90px]">
-                    <div className="text-[10px] text-textMuted uppercase font-bold">{t('ticker')}</div>
-                    <div className="text-xs font-mono text-white font-bold">{getTradingViewSymbolLabelForAsset(asset)}</div>
-                  </div>
-                  <div className="min-w-[90px]">
-                    <div className="text-[10px] text-textMuted uppercase font-bold">{t('price')}</div>
-                    <div className="text-xs font-mono text-neon font-bold">
-                      {quoteUnavailable
-                        ? '—'
-                        : formatPrice(livePrice)}
-                    </div>
-                  </div>
-                  <div className="min-w-[90px]">
-                    <div className="text-[10px] text-textMuted uppercase font-bold">{t('change_24h_val')}</div>
-                    <div
-                      className={`text-xs font-mono font-bold ${
-                        (displayChange24h ?? 0) >= 0 ? 'text-up' : 'text-down'
-                      }`}
-                    >
-                      {(displayChange24h ?? 0) >= 0 ? '+' : ''}
-                      {(displayChange24h ?? 0).toFixed(2)}%
-                    </div>
-                  </div>
-                  <div className="min-w-[120px]">
-                    <div className="text-[10px] text-textMuted uppercase font-bold">{t('volume_24h')}</div>
-                    <div className="text-xs text-textSecondary">
-                      {asset.volume24h >= 1e9
-                        ? (convertFromRub(asset.volume24h) / 1e9).toFixed(2) + ' ' + t('vol_b')
-                        : asset.volume24h >= 1e6
-                          ? (convertFromRub(asset.volume24h) / 1e6).toFixed(2) + ' ' + t('vol_m')
-                          : asset.volume24h >= 1e3
-                            ? (convertFromRub(asset.volume24h) / 1e3).toFixed(1) + ' ' + t('vol_k')
-                            : formatPrice(asset.volume24h)}{' '}
-                      {symbol}
-                    </div>
-                  </div>
-                  <div className="min-w-[140px]">
-                    <div className="text-[10px] text-textMuted uppercase font-bold">{t('min_deal')}</div>
-                    <div className="text-xs text-textSecondary">
-                      {formatPrice(MIN_DEAL_RUB)} {symbol}
-                    </div>
-                  </div>
-                  <div className="min-w-[140px]">
-                    <div className="text-[10px] text-textMuted uppercase font-bold">{t('provider')}</div>
-                    <div className="text-xs text-neon">{provider}</div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* MEXC-like bottom actions: dock above bottom nav */}
-            {!isFullscreen && (
-              <div className="pointer-events-none fixed left-0 right-0 bottom-0 z-40 pb-safe lg:hidden">
-                {/* Dock sits right above BottomNav, no extra gap */}
+              <div className="relative z-40 lg:hidden">
                 <div
-                  className="pointer-events-auto"
+                  className="pointer-events-auto nav-glass"
                   style={{ paddingBottom: 'max(8px, env(safe-area-inset-bottom, 0px))' }}
                 >
-                  <div className="nav-glass w-full px-3 py-1.5">
+                  <div className="px-3 py-2">
+                    {/* Info row */}
+                    <div className="grid grid-cols-3 gap-2 mb-3">
+                      <div>
+                        <div className="text-[9px] text-textMuted uppercase font-bold">{t('ticker')}</div>
+                        <div className="text-xs font-mono text-white font-bold truncate">{getTradingViewSymbolLabelForAsset(asset)}</div>
+                      </div>
+                      <div>
+                        <div className="text-[9px] text-textMuted uppercase font-bold">{t('price')}</div>
+                        <div className="text-xs font-mono text-neon font-bold truncate">
+                          {quoteUnavailable ? '—' : formatPrice(livePrice)}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[9px] text-textMuted uppercase font-bold">{t('change_24h_val')}</div>
+                        <div className={`text-xs font-mono font-bold ${(displayChange24h ?? 0) >= 0 ? 'text-up' : 'text-down'}`}>
+                          {(displayChange24h ?? 0) >= 0 ? '+' : ''}{(displayChange24h ?? 0).toFixed(2)}%
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[9px] text-textMuted uppercase font-bold">{t('volume_24h')}</div>
+                        <div className="text-xs text-textSecondary truncate">
+                          {asset.volume24h >= 1e9
+                            ? (convertFromRub(asset.volume24h) / 1e9).toFixed(2) + ' ' + t('vol_b')
+                            : asset.volume24h >= 1e6
+                              ? (convertFromRub(asset.volume24h) / 1e6).toFixed(2) + ' ' + t('vol_m')
+                              : asset.volume24h >= 1e3
+                                ? (convertFromRub(asset.volume24h) / 1e3).toFixed(1) + ' ' + t('vol_k')
+                                : formatPrice(asset.volume24h)}{' '}
+                          {symbol}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[9px] text-textMuted uppercase font-bold">{t('min_deal')}</div>
+                        <div className="text-xs text-textSecondary">
+                          {formatPrice(MIN_DEAL_RUB)} {symbol}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[9px] text-textMuted uppercase font-bold">{t('provider')}</div>
+                        <div className="text-xs text-neon">{provider}</div>
+                      </div>
+                    </div>
+                    {/* Button row */}
                     <div className="flex items-center gap-2">
                       <button
                         type="button"

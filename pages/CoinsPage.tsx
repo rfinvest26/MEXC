@@ -402,31 +402,36 @@ const CoinsPage: React.FC<CoinsPageProps> = ({
           'hairline-bottom',
         ].join(' ')}
       >
-        <div className="px-4 lg:px-6 pt-2 pb-1.5 max-w-2xl w-full mx-auto">
-          <div className="flex items-center gap-3">
-            <div className="flex-1 min-w-0">
-              <div className="relative group">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Search size={18} className="text-textSubtle group-focus-within:text-textSecondary transition-colors" />
-                </div>
-                <input
-                  type="search"
-                  inputMode="search"
-                  autoComplete="off"
-                  placeholder={primaryTab === 'nft' ? t('markets_nft_search_placeholder') : t('search_pair')}
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onFocus={() => Haptic.tap()}
-                  className="block w-full pl-10 pr-3 h-9 bg-black/35 rounded-full leading-5 text-textPrimary placeholder:text-textSubtle focus:outline-none transition-all font-mono text-[12px] border border-white/5 focus:border-white/10"
-                />
-              </div>
+        {/* Combined search and tabs */}
+        <div className="px-4 lg:px-6 pt-3 pb-2 max-w-2xl w-full mx-auto">
+          {/* Search input */}
+          <div className="relative group mb-3">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <Search size={16} className="text-textSubtle group-focus-within:text-textSecondary transition-colors" />
             </div>
+            <input
+              type="search"
+              inputMode="search"
+              autoComplete="off"
+              placeholder={primaryTab === 'nft' ? t('markets_nft_search_placeholder') : t('search_pair')}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onFocus={() => Haptic.tap()}
+              className="block w-full pl-9 pr-3 h-10 bg-white/[0.04] rounded-xl leading-5 text-textPrimary placeholder:text-textSubtle focus:outline-none transition-all font-mono text-[13px] border border-white/[0.06] focus:border-white/[0.12] focus:bg-white/[0.06]"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="absolute inset-y-0 right-0 pr-3 flex items-center text-textSubtle hover:text-textPrimary transition-colors"
+              >
+                <span className="text-[14px]">×</span>
+              </button>
+            )}
           </div>
-        </div>
 
-        {/* Primary tabs */}
-        <div className="px-4 lg:px-6 max-w-2xl w-full mx-auto">
-          <div className="flex items-center gap-5 overflow-x-auto no-scrollbar pb-1">
+          {/* Primary tabs with pills */}
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
             {(
               [
                 ['favorites', t('markets_tab_favorites')],
@@ -444,8 +449,10 @@ const CoinsPage: React.FC<CoinsPageProps> = ({
                     Haptic.tap();
                     setPrimaryTab(id);
                   }}
-                  className={`whitespace-nowrap text-[14px] font-semibold transition-colors ${
-                    active ? 'text-textPrimary' : 'text-textSubtle'
+                  className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-[13px] font-medium transition-all ${
+                    active
+                      ? 'bg-neon/10 text-neon border border-neon/20'
+                      : 'text-textSubtle hover:text-textSecondary hover:bg-white/[0.04]'
                   }`}
                 >
                   {label}
@@ -455,59 +462,44 @@ const CoinsPage: React.FC<CoinsPageProps> = ({
           </div>
         </div>
 
-        {/* Chips (крипто / NFT — один стиль биржи) */}
-        {(primaryTab === 'crypto' || primaryTab === 'favorites' || primaryTab === 'stocks') && (
-          <div className="px-4 lg:px-6 max-w-2xl w-full mx-auto pb-2">
-            <div className="flex items-center gap-4 overflow-x-auto no-scrollbar">
-              {cryptoSortChips.map((chip) => {
-                const active = cryptoSort === chip.key;
-                return (
-                  <button
-                    key={chip.key}
-                    type="button"
-                    onClick={() => {
-                      Haptic.tap();
-                      setCryptoSort(chip.key);
-                    }}
-                    className={`whitespace-nowrap shrink-0 py-1 text-[12px] font-semibold transition-colors ${
-                      active ? 'text-neon' : 'text-textSubtle'
-                    }`}
-                  >
-                    {chip.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-        {primaryTab === 'nft' && (
-          <div className="px-4 lg:px-6 max-w-2xl w-full mx-auto pb-2">
-            <div className="flex items-center gap-4 overflow-x-auto no-scrollbar">
-              {nftSortChips.map((chip) => {
-                const active = nftSort === chip.key;
-                return (
-                  <button
-                    key={chip.key}
-                    type="button"
-                    onClick={() => {
-                      Haptic.tap();
-                      setNftSort(chip.key);
-                    }}
-                    className={`whitespace-nowrap shrink-0 py-1 text-[12px] font-semibold transition-colors ${
-                      active ? 'text-neon' : 'text-textSubtle'
-                    }`}
-                  >
-                    {chip.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Table header */}
+        {/* Sort chips - compact horizontal scroll */}
         <div className="px-4 lg:px-6 max-w-2xl w-full mx-auto pb-2">
-          <div className="grid grid-cols-12 gap-2 text-[12px] text-textSubtle">
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+            {(primaryTab === 'crypto' || primaryTab === 'favorites' || primaryTab === 'stocks'
+              ? cryptoSortChips
+              : nftSortChips
+            ).map((chip) => {
+              const active = (primaryTab === 'crypto' || primaryTab === 'favorites' || primaryTab === 'stocks')
+                ? cryptoSort === chip.key
+                : nftSort === chip.key;
+              return (
+                <button
+                  key={chip.key}
+                  type="button"
+                  onClick={() => {
+                    Haptic.tap();
+                    if (primaryTab === 'crypto' || primaryTab === 'favorites' || primaryTab === 'stocks') {
+                      setCryptoSort(chip.key as CryptoMarketsSort);
+                    } else {
+                      setNftSort(chip.key as NftMarketsSort);
+                    }
+                  }}
+                  className={`whitespace-nowrap shrink-0 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
+                    active
+                      ? 'bg-white/[0.08] text-textPrimary border border-white/[0.08]'
+                      : 'text-textSubtle hover:text-textSecondary hover:bg-white/[0.04]'
+                  }`}
+                >
+                  {chip.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Table header - more compact */}
+        <div className="px-4 lg:px-6 max-w-2xl w-full mx-auto pb-2 pt-1">
+          <div className="grid grid-cols-12 gap-2 text-[11px] text-textMuted font-medium">
             {primaryTab === 'nft' ? (
               <>
                 <div className="col-span-5">{t('markets_table_nft_pair')}</div>
@@ -871,18 +863,12 @@ const CoinsPage: React.FC<CoinsPageProps> = ({
                             <Star size={16} className={fav ? 'text-amber-400 fill-amber-400' : 'text-textSubtle'} />
                           </button>
                         </div>
-                        <div className="text-[12px] text-textSubtle mt-0.5 line-clamp-2 leading-snug">
-                          {(asset.category ?? 'crypto') === 'stock' ? subRowText : <span className="font-mono">{subRowText}</span>}
-                        </div>
                       </div>
                     </div>
 
                     <div className="col-span-4 text-right">
                       <div className={`text-[16px] font-mono font-bold ${isUp ? 'text-up' : 'text-down'}`}>
                         {priceText}
-                      </div>
-                      <div className="text-[12px] text-textSubtle font-mono">
-                        {asset.priceUnavailable ? '' : `${formatPrice(asset.price)} ${symbol}`}
                       </div>
                     </div>
 

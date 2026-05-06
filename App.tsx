@@ -48,6 +48,7 @@ import { FullscreenSheetLockProvider } from './context/FullscreenSheetLockContex
 import { useWebAuth } from './context/WebAuthContext';
 import { PasswordChangeProvider, usePasswordChange } from './context/PasswordChangeContext';
 import Modal from './components/Modal';
+import SplashScreen from './components/SplashScreen';
 
 // Prefetch: запускаем загрузку цен ДО монтирования React — кеш заполнится быстрее
 prefetchCryptoPrices(MARKET_ASSETS.map((a) => a.ticker));
@@ -167,6 +168,12 @@ const AppContent: React.FC = () => {
   const [nftDetailCodeKey, setNftDetailCodeKey] = useState<string | null>(null);
   /** Ссылка из бота: ?nft_slug=…&nft_code=… (один раз за сессию) */
   const nftDeepLinkConsumed = React.useRef(false);
+  const [minLoadingDone, setMinLoadingDone] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setMinLoadingDone(true), 2000);
+    return () => clearTimeout(timer);
+  }, []);
 
   const refId = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('ref') : null;
   const openSupport = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('open') === 'support' : false;
@@ -688,9 +695,9 @@ const AppContent: React.FC = () => {
     Haptic.success();
   };
 
-  // Пока Supabase грузит пользователя — показываем пустой фон, не вешаем на сплеше
-  if (loading && !tgid && !webId) {
-    return <div className="h-screen bg-background" />;
+  // Пока Supabase грузит пользователя — показываем сплеш-скрин
+  if (loading || !minLoadingDone) {
+    return <SplashScreen />;
   }
   // Auth gate открывается только при попытке перейти в защищённые разделы
   if (authGateOpen) {

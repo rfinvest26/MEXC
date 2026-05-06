@@ -71,9 +71,9 @@ const BottomNav: React.FC<BottomNavProps> = ({ currentPage, onNavigate, embedded
 
   return (
     <nav
-      className="fixed left-0 right-0 bottom-0 z-50 rounded-t-3xl nav-glass"
+      className="fixed left-0 right-0 bottom-0 z-50 nav-glass border-t border-white/[0.06]"
       style={{
-        paddingBottom: 'max(8px, env(safe-area-inset-bottom, 0px))',
+        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
       }}
     >
       {navBody}

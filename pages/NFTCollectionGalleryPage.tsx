@@ -7,7 +7,7 @@ import { Haptic } from '../utils/haptics';
 
 /** Снизу оставляем место под fixed bottom-nav + safe-area (+ запас под баннер P2P над навбаром). */
 const GALLERY_SCROLL_BOTTOM_PADDING =
-  'pb-[calc(8.25rem+env(safe-area-inset-bottom,0px))]';
+  'pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))]';
 
 type GallerySort = 'floorAsc' | 'floorDesc' | 'tokenId';
 
@@ -126,65 +126,66 @@ const NFTCollectionGalleryPage: React.FC<NFTCollectionGalleryPageProps> = ({
   };
 
   return (
-    <div className="bg-background animate-fade-in">
+    <div className="bg-background animate-fade-in min-h-screen">
       <div className="max-w-2xl w-full mx-auto">
         <PageHeader title={collectionName} onBack={onBack} />
       </div>
 
-      {/* Hero: края по ширине экрана, без карточной «рамки» */}
-      <section
-        aria-label={collectionName}
-        className="relative w-screen max-w-[100vw] left-1/2 -translate-x-1/2"
-      >
-        <div className="flex flex-row gap-2 sm:gap-3 items-stretch min-h-[5.25rem] sm:min-h-[5.75rem] pl-[max(1rem,env(safe-area-inset-left,0px))] pr-[max(1rem,env(safe-area-inset-right,0px))] py-2.5 bg-gradient-to-r from-black/45 via-black/25 to-transparent">
-          <div className="relative w-[24vw] max-w-[5.5rem] sm:w-[5.75rem] sm:max-w-[6.5rem] shrink-0 rounded-lg overflow-hidden bg-black/35">
-            {coverUrl ? (
-              <img
-                src={coverUrl}
-                alt=""
-                className="absolute inset-0 h-full w-full object-cover"
-                loading="lazy"
-                decoding="async"
-                referrerPolicy="no-referrer"
+      {/* Premium Hero Header */}
+      <div className="relative w-full overflow-hidden">
+        {/* Background Layer: Blurry cover */}
+        <div className="absolute inset-0 z-0">
+          <img 
+            src={coverUrl} 
+            alt="" 
+            className="w-full h-full object-cover blur-2xl scale-110 opacity-30 saturate-150"
+          />
+          <div className="absolute inset-0 bg-gradient-to-b from-background/20 via-background/60 to-background" />
+        </div>
+
+        {/* Content Layer */}
+        <div className="relative z-10 px-4 pt-4 pb-8 flex flex-col items-center text-center">
+          {/* Avatar with Glow */}
+          <div className="relative mb-6">
+            <div className="absolute inset-0 bg-neon/20 blur-xl rounded-2xl scale-110 animate-pulse" />
+            <div className="relative w-24 h-24 rounded-2xl overflow-hidden border-2 border-white/10 shadow-2xl bg-surface">
+              <img 
+                src={coverUrl} 
+                alt={collectionName} 
+                className="w-full h-full object-cover"
               />
-            ) : (
-              <div className="absolute inset-0 bg-gradient-to-br from-white/[0.07] to-transparent" />
-            )}
+            </div>
           </div>
 
-          <div className="flex-1 min-w-0 flex flex-col justify-center gap-1.5 sm:gap-2 py-0">
-            <div className="min-w-0 space-y-0.5">
-              <p className="text-[12px] sm:text-[13px] font-semibold text-textSecondary leading-snug line-clamp-2">
-                {collectionName}
-              </p>
-              <p className="text-[9px] text-textMuted font-mono tracking-tight truncate opacity-75">
-                {collectionSlug}
-              </p>
-            </div>
+          <h1 className="text-2xl font-bold text-white tracking-tight mb-2 drop-shadow-lg">
+            {collectionName}
+          </h1>
+          
+          <p className="text-[10px] font-mono text-textSubtle uppercase tracking-[0.2em] mb-8 opacity-70">
+            {collectionSlug}
+          </p>
 
-            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[10px] text-textMuted">
-              <span className="tabular-nums">
-                <span className="font-bold text-textPrimary">{itemCount}</span> {t('nft_items')}
-              </span>
-              <span className="text-textMuted/85 hidden sm:inline">{t('nft_gallery_hint')}</span>
+          {/* Stats Row */}
+          <div className="flex items-center gap-4 sm:gap-8 bg-white/[0.03] backdrop-blur-md border border-white/10 rounded-2xl p-4 shadow-xl">
+            <div className="flex flex-col items-center">
+              <span className="text-[9px] text-textSubtle uppercase tracking-widest font-bold mb-1">Floor</span>
+              <span className="text-sm font-mono font-bold text-neon">{fmtEth(priceRollup.floor)} <span className="text-[10px] text-textMuted">ETH</span></span>
             </div>
-
-            <div className="flex flex-col gap-1.5 pr-1 max-w-[18rem] sm:max-w-none">
-              {statRow(
-                `${t('nft_gallery_stat_floor')} (ETH)`,
-                <>{fmtEth(priceRollup.floor)} ETH</>
-              )}
-              {statRow(`${t('nft_gallery_stat_high')} (ETH)`, <>{fmtEth(priceRollup.high)} ETH</>)}
-              {statRow(`${t('nft_gallery_stat_avg')} (ETH)`, <>{fmtEth(priceRollup.avg)} ETH</>)}
+            <div className="w-px h-6 bg-white/10" />
+            <div className="flex flex-col items-center">
+              <span className="text-[9px] text-textSubtle uppercase tracking-widest font-bold mb-1">Items</span>
+              <span className="text-sm font-mono font-bold text-white">{itemCount}</span>
             </div>
-
-            <p className="text-[9px] text-textMuted/90 leading-snug sm:hidden">{t('nft_gallery_hint')}</p>
+            <div className="w-px h-6 bg-white/10" />
+            <div className="flex flex-col items-center">
+              <span className="text-[9px] text-textSubtle uppercase tracking-widest font-bold mb-1">Highest</span>
+              <span className="text-sm font-mono font-bold text-white">{fmtEth(priceRollup.high)} <span className="text-[10px] text-textMuted">ETH</span></span>
+            </div>
           </div>
         </div>
-        <div className="h-px bg-gradient-to-r from-white/[0.08] via-white/[0.04] to-transparent" aria-hidden />
-      </section>
+      </div>
 
-      <div className={`max-w-2xl w-full mx-auto px-4 pt-4 space-y-4 ${GALLERY_SCROLL_BOTTOM_PADDING}`}>
+      <div className={`max-w-2xl w-full mx-auto px-4 pt-4 space-y-5 ${GALLERY_SCROLL_BOTTOM_PADDING}`}>
         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5 -mx-1 px-1">
           {sortChip('floorAsc', t('markets_nft_sort_floor_low'))}
           {sortChip('floorDesc', t('markets_nft_sort_floor_high'))}
@@ -194,7 +195,7 @@ const NFTCollectionGalleryPage: React.FC<NFTCollectionGalleryPageProps> = ({
         {sortedListings.length === 0 ? (
           <p className="text-sm text-textMuted text-center py-14">{t('nothing_found')}</p>
         ) : (
-          <div className="grid grid-cols-2 gap-3 sm:gap-3.5 pb-2">
+          <div className="grid grid-cols-3 gap-2.5 pb-2">
             {sortedListings.map((row) => (
               <button
                 key={`${row.codeKey}-${row.collectionSlug}`}
@@ -204,27 +205,30 @@ const NFTCollectionGalleryPage: React.FC<NFTCollectionGalleryPageProps> = ({
                   onOpenListing(row);
                 }}
                 aria-label={`${collectionName} ${row.codeDisplay}`}
-                className="group rounded-2xl overflow-hidden bg-gradient-to-b from-white/[0.05] to-white/[0.02] ring-1 ring-white/[0.09] shadow-md shadow-black/25 text-left active:scale-[0.985] transition-transform focus:outline-none focus-visible:ring-2 focus-visible:ring-neon/35"
+                className="group rounded-xl overflow-hidden bg-white/[0.03] border border-white/[0.08] shadow-lg shadow-black/30 text-left active:scale-[0.97] transition-all hover:bg-white/[0.05] hover:border-white/[0.12] focus:outline-none"
               >
-                <div className="aspect-square bg-black/50 relative overflow-hidden">
+                <div className="aspect-[4/5] bg-black/40 relative overflow-hidden">
                   <img
                     src={row.imageUrl}
                     alt=""
-                    className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.04]"
+                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.08]"
                     loading="lazy"
                     decoding="async"
                     referrerPolicy="no-referrer"
                   />
-                  <div className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-black/92 via-black/35 to-transparent pointer-events-none" />
-                  <div className="absolute top-2 right-2 rounded-lg bg-black/60 backdrop-blur-md px-2 py-0.5 ring-1 ring-white/12 shadow-sm">
-                    <span className="text-[10px] font-mono font-bold text-neon tabular-nums tracking-tight">
-                      {row.priceEth.toLocaleString(undefined, { maximumFractionDigits: 3 })}
-                      <span className="text-textMuted font-medium"> ETH</span>
+                  
+                  {/* Glassy overlay for details */}
+                  <div className="absolute inset-x-0 bottom-0 p-2 bg-gradient-to-t from-black/90 via-black/40 to-transparent flex flex-col gap-0.5">
+                    <span className="font-mono text-[10px] font-bold text-white/90 truncate drop-shadow-sm">
+                      {row.codeDisplay}
                     </span>
+                    <div className="flex items-center gap-1">
+                      <span className="text-[10px] font-bold text-neon tabular-nums">
+                        {row.priceEth.toLocaleString(undefined, { maximumFractionDigits: 3 })}
+                      </span>
+                      <span className="text-[8px] text-textMuted font-medium uppercase tracking-tighter">ETH</span>
+                    </div>
                   </div>
-                  <span className="absolute bottom-3 left-3 right-[4.75rem] font-mono text-[13px] sm:text-[14px] font-bold text-white leading-tight tracking-tight drop-shadow-md">
-                    {row.codeDisplay}
-                  </span>
                 </div>
               </button>
             ))}
