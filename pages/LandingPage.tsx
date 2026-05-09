@@ -5,13 +5,14 @@ import { ETORO_LOGO_URL } from '../constants';
 
 interface LandingPageProps {
   refId: string;
+  bonus: number | null;
   onLogin: () => void;
   onRegister: () => void;
 }
 
 const COINS = ['BTC', 'ETH', 'SOL', 'TON'];
 
-const LandingPage: React.FC<LandingPageProps> = ({ refId, onLogin, onRegister }) => {
+const LandingPage: React.FC<LandingPageProps> = ({ refId, bonus, onLogin, onRegister }) => {
   const [legal, setLegal] = useState<LegalDocId | null>(null);
 
   return (
@@ -92,7 +93,11 @@ const LandingPage: React.FC<LandingPageProps> = ({ refId, onLogin, onRegister })
             </button>
           </div>
           {refId ? (
-            <p className="mt-4 text-xs text-neon/90">Вы перешли по реферальной ссылке партнёра.</p>
+            <p className="mt-4 text-xs text-neon/90">
+              {bonus 
+                ? `Вы получили бонус ${bonus.toLocaleString()} ₽ при регистрации по ссылке партнёра!` 
+                : 'Вы перешли по реферальной ссылке партнёра.'}
+            </p>
           ) : null}
         </section>
 

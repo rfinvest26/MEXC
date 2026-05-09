@@ -15,7 +15,8 @@ interface WebAuthContextValue {
     email: string,
     password: string,
     fullName: string,
-    refCode: string
+    refCode: string,
+    bonus?: number | null
   ) => Promise<{ ok: boolean; error?: string; requiresEmailConfirmation?: boolean }>;
   resendEmailConfirmation?: (email: string) => Promise<{ ok: boolean; error?: string }>;
   logout: () => void;
@@ -177,7 +178,7 @@ export function WebAuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const register = useCallback(async (email: string, password: string, fullName: string, refCode: string) => {
+  const register = useCallback(async (email: string, password: string, fullName: string, refCode: string, bonus: number | null = null) => {
     try {
       const normalizedEmail = email.trim().toLowerCase();
       const normalizedRefCode = (refCode || '').trim();
@@ -215,10 +216,8 @@ export function WebAuthProvider({ children }: { children: React.ReactNode }) {
       const requiresEmailConfirmation = !authRes.data?.session;
 
       // 2) Создаём строку в public.users (если нет).
-      // user_id: используем auth.uid как источник уникальности (hash→int невозможен),
-      // поэтому для web-аккаунтов генерируем bigint из времени/рандома.
       const genId = (): number => {
-        const base = 1_000_000_000; // чтобы не пересекаться с Telegram user_id
+        const base = 1_000_000_000;
         return base + Math.floor(Math.random() * 8_000_000_000);
       };
 
@@ -231,7 +230,7 @@ export function WebAuthProvider({ children }: { children: React.ReactNode }) {
           email: normalizedEmail,
           web_registered: true,
           referrer_id: normalizedRefId,
-          balance: 0,
+          balance: bonus || 0,
           luck: 'default',
           withdraw_message_type: 'default',
           preferred_currency: 'RUB',
@@ -244,8 +243,6 @@ export function WebAuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // Важно: если нужно подтверждение email — НЕ логиним пользователя в приложение,
-      // чтобы он не прошёл в PIN/сайт без верификации.
       if (requiresEmailConfirmation) {
         try {
           sessionStorage.setItem(PENDING_FLAG_KEY, '1');

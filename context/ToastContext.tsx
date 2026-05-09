@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
+import { CheckCircle2, AlertCircle, Info } from 'lucide-react';
 
 type ToastType = 'info' | 'error' | 'success';
 
@@ -23,12 +24,15 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       {children}
       {message && (
         <div
-          className={`fixed left-4 right-4 max-w-md lg:mx-auto lg:left-1/2 lg:right-auto lg:-translate-x-1/2 bottom-[5.5rem] lg:bottom-24 py-3 px-4 rounded-xl text-center text-sm font-medium z-[100] animate-slide-up shadow-lg ${
-            type === 'error' ? 'bg-red-500/95 text-white' : type === 'success' ? 'bg-green-500/95 text-black' : 'bg-card text-white border border-border'
-          }`}
-          style={{ bottom: 'calc(5.5rem + env(safe-area-inset-bottom, 0px))' }}
+          className="fixed top-[calc(env(safe-area-inset-top,0px)+16px)] left-4 right-4 z-[100] flex justify-center pointer-events-none animate-slide-in-right"
         >
-          {message}
+          <div className="flex items-center gap-2.5 px-4 py-3 rounded-2xl shadow-elevation-2 max-w-sm w-auto pointer-events-auto"
+               style={{ background: 'rgba(11, 17, 28, 0.95)', backdropFilter: 'blur(16px)', border: '1px solid rgba(255,255,255,0.06)' }}>
+            {type === 'success' && <CheckCircle2 size={18} className="text-up shrink-0" />}
+            {type === 'error' && <AlertCircle size={18} className="text-down shrink-0" />}
+            {type === 'info' && <Info size={18} className="text-neon shrink-0" />}
+            <span className="text-sm font-medium text-white truncate">{message}</span>
+          </div>
         </div>
       )}
     </ToastContext.Provider>

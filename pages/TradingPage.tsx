@@ -7,7 +7,7 @@ import {
   type PendingOrder,
   type TradingRiskSettings,
 } from '../types';
-import { Clock, Zap, Check, X, ChevronDown, ChevronRight, Info, BarChart3, FileText, Loader2, CheckCircle2, Settings2, ArrowLeftRight, Minus, Plus } from 'lucide-react';
+import { Clock, Zap, Check, X, ChevronDown, ChevronRight, Info, BarChart3, FileText, Loader2, CheckCircle2, Settings2, ArrowLeftRight, Minus, Plus, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
 import PageHeader from '../components/PageHeader';
 import { Haptic } from '../utils/haptics';
 import { useToast } from '../context/ToastContext';
@@ -412,6 +412,11 @@ const TradingPage: React.FC<TradingPageProps> = ({
   const [interval, setInterval] = useState<ChartInterval>('5m');
   const [chartStyle, setChartStyle] = useState<ChartStyle>('candles');
   const [provider, setProvider] = useState<ChartProvider>('TV');
+  const [tpPrice, setTpPrice] = useState<string>('');
+  const [slPrice, setSlPrice] = useState<string>('');
+  const [marginMode, setMarginMode] = useState<'isolated' | 'cross'>('isolated');
+  const [showMarginSheet, setShowMarginSheet] = useState(false);
+
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [chartAnimMode, setChartAnimMode] = useState<'fade' | 'slide'>('fade');
 
@@ -1117,7 +1122,10 @@ const TradingPage: React.FC<TradingPageProps> = ({
         entryPrice: livePrice,
         startTime: Date.now(),
         durationSeconds: duration,
-        status: 'ACTIVE'
+        status: 'ACTIVE',
+        takeProfitPrice: parseFloat(tpPrice.replace(',', '.')) || undefined,
+        stopLossPrice: parseFloat(slPrice.replace(',', '.')) || undefined,
+        marginMode: marginMode,
       };
       onOpenDeal(newDeal);
   };
@@ -1368,20 +1376,31 @@ const TradingPage: React.FC<TradingPageProps> = ({
                   </button>
                 )}
                 {!isNft ? (
-                  <button
-                    type="button"
-                    onClick={() => { Haptic.tap(); setActiveTab(activeTab === 'TRADE' ? 'CHART' : 'TRADE'); }}
-                    className={[
-                      'h-9 w-9 rounded-2xl flex items-center justify-center active:scale-[0.98] transition-transform',
-                      activeTab === 'CHART'
-                        ? 'bg-white/[0.14] text-textPrimary shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]'
-                        : 'bg-white/[0.04] text-textSecondary',
-                    ].join(' ')}
-                    aria-label={t('chart_toggle_aria')}
-                    title={t('chart_title')}
-                  >
-                    <BarChart3 size={18} />
-                  </button>
+                  <div className="flex bg-white/[0.04] rounded-xl p-1 gap-1 border border-white/[0.06]">
+                    {(['TRADE', 'CHART'] as const).map((tab) => {
+                      const isActive = activeTab === tab;
+                      return (
+                        <button
+                          key={tab}
+                          type="button"
+                          onClick={() => { Haptic.tap(); setActiveTab(tab); }}
+                          className={[
+                            'w-8 h-7 rounded-lg flex items-center justify-center transition-all active:scale-[0.98]',
+                            isActive 
+                              ? 'bg-white/[0.08] text-textPrimary shadow-sm shadow-black/20' 
+                              : 'text-textSubtle hover:text-textSecondary'
+                          ].join(' ')}
+                          aria-label={tab === 'CHART' ? t('chart') : t('trade')}
+                        >
+                          {tab === 'CHART' ? (
+                            <BarChart3 size={16} />
+                          ) : (
+                            <ArrowLeftRight size={16} />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
                 ) : null}
               </div>
             </div>
@@ -2138,6 +2157,21 @@ const TradingPage: React.FC<TradingPageProps> = ({
                 {/* FUTURES: сумма, плечо, время, Long/Short */}
                 {tradeType === 'futures' && (
                 <>
+                {/* Margin Mode & Leverage Indicators (MEXC Header style) */}
+                <div className="flex items-center gap-2 mb-4 px-1">
+                  <button
+                    type="button"
+                    onClick={() => { Haptic.tap(); setShowMarginSheet(true); }}
+                    className="h-7 px-3 rounded-lg bg-white/[0.04] border border-white/[0.06] text-textPrimary text-[11px] font-bold uppercase tracking-wider active:scale-95 transition-transform flex items-center gap-1.5"
+                  >
+                    {marginMode === 'isolated' ? t('margin_isolated') : t('margin_cross')}
+                    <ChevronDown size={10} className="text-textSubtle" />
+                  </button>
+                  <div className="h-7 px-3 rounded-lg bg-white/[0.04] border border-white/[0.06] text-neon text-[11px] font-bold flex items-center">
+                    {leverage}X
+                  </div>
+                </div>
+
                 {/* Direction (move up, MEXC-like) */}
                 <div className="space-y-1">
                   <div className="flex gap-1.5 p-1 rounded-full bg-white/5 border border-white/5">
@@ -2235,9 +2269,9 @@ const TradingPage: React.FC<TradingPageProps> = ({
                             <label className="text-[10px] text-neutral-500 uppercase font-bold flex items-center">
                                 <Clock size={10} className="mr-1 text-neon" /> {t('time')}
                             </label>
-                    <span className="text-xs font-mono font-bold text-neon">
-                      {formatDurationLabel(duration)}
-                    </span>
+                            <span className="text-xs font-mono font-bold text-neon">
+                              {formatDurationLabel(duration)}
+                            </span>
                         </div>
                         <input
                             type="range"
@@ -2249,6 +2283,40 @@ const TradingPage: React.FC<TradingPageProps> = ({
                             className="w-full h-1.5 rounded-full appearance-none cursor-pointer accent-neon mt-1"
                             style={{ background: `linear-gradient(to right, #21B053 ${TIMEFRAMES.findIndex(tf => tf.sec === duration) / (TIMEFRAMES.length - 1) * 100}%, rgba(255,255,255,0.1) 0%)` }}
                         />
+                    </div>
+
+                    {/* TP / SL */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-[10px] text-neutral-500 uppercase font-bold flex items-center gap-1">
+                          <ArrowUpRight size={10} className="text-up" /> TP
+                        </label>
+                        <div className="bg-card border border-border rounded-lg px-2 py-1.5 flex items-center focus-within:border-up/50 transition-colors">
+                          <input 
+                            type="text"
+                            inputMode="decimal"
+                            value={tpPrice}
+                            onChange={(e) => setTpPrice(e.target.value)}
+                            className="w-full bg-transparent text-white font-mono text-xs font-bold outline-none placeholder-neutral-700"
+                            placeholder={t('not_set') || 'Not Set'}
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] text-neutral-500 uppercase font-bold flex items-center gap-1">
+                          <ArrowDownLeft size={10} className="text-down" /> SL
+                        </label>
+                        <div className="bg-card border border-border rounded-lg px-2 py-1.5 flex items-center focus-within:border-down/50 transition-colors">
+                          <input 
+                            type="text"
+                            inputMode="decimal"
+                            value={slPrice}
+                            onChange={(e) => setSlPrice(e.target.value)}
+                            className="w-full bg-transparent text-white font-mono text-xs font-bold outline-none placeholder-neutral-700"
+                            placeholder={t('not_set') || 'Not Set'}
+                          />
+                        </div>
+                      </div>
                     </div>
 
                     {/* Direction moved up */}
@@ -2427,49 +2495,49 @@ const TradingPage: React.FC<TradingPageProps> = ({
 
             {!isNft ? (
               /* RIGHT COLUMN: стакан только для крипто/акций — у NFT убираем пустые flex-блоки */
-              <div className="flex w-[44%] lg:w-[44%] min-h-0 flex-col bg-card overflow-y-auto no-scrollbar">
-                <div className="flex justify-between px-3 py-3 text-[9px] text-textSecondary uppercase tracking-wider border-b border-border">
+              <div className="flex w-[44%] lg:w-[44%] min-h-0 flex-col bg-surface overflow-y-auto no-scrollbar">
+                <div className="flex justify-between px-2 py-2 text-[9px] text-textSubtle uppercase tracking-wider border-b border-white/[0.04] shrink-0">
                   <span>{t('order_book_price')}</span>
                   <span>{t('order_book_size')}</span>
                 </div>
 
-                <div className="flex flex-col-reverse justify-end flex-1 overflow-hidden pb-1 space-y-reverse space-y-[1px]">
+                <div className="flex flex-col-reverse justify-end flex-1 overflow-hidden">
                   {asks.map((ask, i) => (
-                    <div key={`ask-${i}`} className="flex justify-between px-2 py-[2px] relative group cursor-pointer hover-row">
-                      <span className="text-[10px] font-mono text-red-400 relative z-10">{formatPrice(ask.price)}</span>
-                      <span className="text-[10px] font-mono text-neutral-500 relative z-10">{ask.size.toFixed(3)}</span>
-                      <div className="absolute right-0 top-0 bottom-0 bg-red-500/10 z-0" style={{ width: `${Math.random() * 60}%` }} />
+                    <div key={`ask-${i}`} className="flex justify-between px-2 py-0.5 relative group cursor-pointer hover-row">
+                      <span className="text-[11px] font-mono font-medium text-down relative z-10">{formatPrice(ask.price)}</span>
+                      <span className="text-[11px] font-mono text-textMuted relative z-10">{ask.size.toFixed(3)}</span>
+                      <div className="absolute right-0 top-0 bottom-0 bg-down/10 z-0 transition-all duration-300" style={{ width: `${Math.random() * 80 + 10}%` }} />
                     </div>
                   ))}
                 </div>
 
                 <div
-                  className={`py-2 border-y border-border flex flex-col items-center bg-background my-1 transition-colors duration-200 ${
+                  className={`py-1.5 border-y border-white/[0.04] flex flex-col items-center bg-surface my-0.5 shrink-0 transition-colors duration-200 ${
                     flashDirection === 'up' ? 'animate-flash-up' : flashDirection === 'down' ? 'animate-flash-down' : ''
                   }`}
                 >
                   <span
-                    className={`text-sm font-mono font-bold ${
-                      priceDirection === 'up' ? 'text-up' : priceDirection === 'down' ? 'text-down' : 'text-white'
+                    className={`text-[15px] font-mono font-bold leading-none ${
+                      priceDirection === 'up' ? 'text-up' : priceDirection === 'down' ? 'text-down' : 'text-textPrimary'
                     }`}
                   >
                     {quoteUnavailable ? '—' : formatPrice(orderBookBase > 0 ? orderBookBase : livePrice)}
                   </span>
-                  <span className="text-[8px] text-neutral-500">{currencyCode}</span>
+                  <span className="text-[9px] text-textSubtle mt-0.5">{currencyCode}</span>
                 </div>
 
-                <div className="flex flex-col flex-1 overflow-hidden pt-1 space-y-[1px]">
+                <div className="flex flex-col flex-1 overflow-hidden">
                   {bids.map((bid, i) => (
-                    <div key={`bid-${i}`} className="flex justify-between px-2 py-[2px] relative group cursor-pointer hover-row">
-                      <span className="text-[10px] font-mono text-green-400 relative z-10">{formatPrice(bid.price)}</span>
-                      <span className="text-[10px] font-mono text-neutral-500 relative z-10">{bid.size.toFixed(3)}</span>
-                      <div className="absolute right-0 top-0 bottom-0 bg-green-500/10 z-0" style={{ width: `${Math.random() * 60}%` }} />
+                    <div key={`bid-${i}`} className="flex justify-between px-2 py-0.5 relative group cursor-pointer hover-row">
+                      <span className="text-[11px] font-mono font-medium text-up relative z-10">{formatPrice(bid.price)}</span>
+                      <span className="text-[11px] font-mono text-textMuted relative z-10">{bid.size.toFixed(3)}</span>
+                      <div className="absolute right-0 top-0 bottom-0 bg-up/10 z-0 transition-all duration-300" style={{ width: `${Math.random() * 80 + 10}%` }} />
                     </div>
                   ))}
                 </div>
 
-                <div className="p-2 border-t border-border flex justify-center">
-                  <ChevronDown size={14} className="text-neutral-600" />
+                <div className="p-1 border-t border-white/[0.04] flex justify-center shrink-0">
+                  <ChevronDown size={14} className="text-textSubtle opacity-50" />
                 </div>
               </div>
             ) : null}
@@ -2762,6 +2830,56 @@ const TradingPage: React.FC<TradingPageProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* MARGIN MODE BOTTOM SHEET */}
+      {showMarginSheet && (
+        <BottomSheet
+          open
+          onClose={() => setShowMarginSheet(false)}
+          title={t('margin_mode_title')}
+        >
+          <div className="space-y-4 pb-4">
+            <div className="flex gap-2 p-1 bg-white/5 rounded-xl border border-white/10">
+              {(['isolated', 'cross'] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => { Haptic.tap(); setMarginMode(mode); }}
+                  className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${
+                    marginMode === mode ? 'bg-neon text-black' : 'text-textSecondary hover:bg-white/5'
+                  }`}
+                >
+                  {mode === 'isolated' ? t('margin_isolated') : t('margin_cross')}
+                </button>
+              ))}
+            </div>
+
+            <div className="space-y-3 px-1">
+              <div className="p-3 rounded-xl bg-white/5 border border-white/5">
+                <h4 className="text-xs font-bold text-textPrimary mb-1 uppercase tracking-wider">{t('margin_isolated')}</h4>
+                <p className="text-[11px] text-textMuted leading-relaxed">
+                  {t('margin_isolated_desc')}
+                </p>
+              </div>
+
+              <div className="p-3 rounded-xl bg-white/5 border border-white/5">
+                <h4 className="text-xs font-bold text-textPrimary mb-1 uppercase tracking-wider">{t('margin_cross')}</h4>
+                <p className="text-[11px] text-textMuted leading-relaxed">
+                  {t('margin_cross_desc')}
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => { Haptic.tap(); setShowMarginSheet(false); }}
+              className="w-full h-12 rounded-xl bg-neon text-black font-bold active:scale-95 transition-transform mt-2"
+            >
+              {t('confirm')}
+            </button>
+          </div>
+        </BottomSheet>
       )}
 
     </div>

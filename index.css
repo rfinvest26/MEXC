@@ -37,6 +37,7 @@
 
 :root {
   --ease-modal: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-spring: cubic-bezier(0.2, 0.9, 0.2, 1);
   --duration-flash: 300ms;
   --duration-modal: 300ms;
   --color-flash-up: rgba(16, 185, 129, 0.35);
@@ -64,7 +65,7 @@ body {
   height: 100%;
   background-color: #070B12;
   color: #ECEEF1;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   font-size: 14px;
   line-height: 1.45;
   font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
@@ -120,6 +121,10 @@ button, a, [role="button"], .cursor-pointer { touch-action: manipulation; -webki
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
+/* ==========================================
+   MEXC Premium Animations
+   ========================================== */
+
 @keyframes landing-rise { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes landing-glow-shift { 0%, 100% { opacity: 0.85; transform: scale(1); } 50% { opacity: 1; transform: scale(1.03); } }
 .landing-animate { animation: landing-rise 0.65s cubic-bezier(0.25, 0.8, 0.25, 1) forwards; opacity: 0; }
@@ -128,7 +133,10 @@ button, a, [role="button"], .cursor-pointer { touch-action: manipulation; -webki
 .landing-float { animation: landing-glow-shift 12s ease-in-out infinite; }
 
 @keyframes fade-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-.animate-fade-in { animation: fade-in 0.2s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+.animate-fade-in { animation: fade-in 0.22s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+
+@keyframes fade-in-fast { from { opacity: 0; } to { opacity: 1; } }
+.animate-fade-in-fast { animation: fade-in-fast 0.15s ease-out forwards; }
 
 @keyframes slide-up { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
 .animate-slide-up { animation: slide-up 0.28s var(--ease-modal) forwards; }
@@ -175,6 +183,69 @@ button, a, [role="button"], .cursor-pointer { touch-action: manipulation; -webki
 .animate-flash-up { animation: flash-up var(--duration-flash) var(--ease-modal) forwards; }
 .animate-flash-down { animation: flash-down var(--duration-flash) var(--ease-modal) forwards; }
 
+/* Premium Shimmer Skeleton */
+@keyframes shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.04) 0%,
+    rgba(255, 255, 255, 0.09) 40%,
+    rgba(255, 255, 255, 0.04) 80%
+  );
+  background-size: 800px 100%;
+  animation: shimmer 1.6s ease-in-out infinite;
+}
+
+/* Pulse ring for loading states */
+@keyframes pulse-ring {
+  0% { transform: scale(0.8); opacity: 1; }
+  100% { transform: scale(1.4); opacity: 0; }
+}
+.animate-pulse-ring {
+  animation: pulse-ring 1.5s cubic-bezier(0.2, 0.9, 0.2, 1) infinite;
+}
+
+/* Loading bar sweep */
+@keyframes loading-sweep {
+  0% { transform: translateX(-100%); }
+  50% { transform: translateX(0%); width: 60%; }
+  100% { transform: translateX(100%); }
+}
+.animate-loading-sweep { animation: loading-sweep 1.8s ease-in-out infinite; }
+
+/* Staggered list item reveal */
+@keyframes list-item-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-list-item { animation: list-item-in 0.2s var(--ease-modal) both; }
+.animate-list-item-d1 { animation-delay: 0.05s; }
+.animate-list-item-d2 { animation-delay: 0.1s; }
+.animate-list-item-d3 { animation-delay: 0.15s; }
+.animate-list-item-d4 { animation-delay: 0.2s; }
+.animate-list-item-d5 { animation-delay: 0.25s; }
+
+/* Splash screen specific */
+@keyframes splash-logo-in {
+  0% { opacity: 0; transform: scale(0.88) translateY(10px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+.animate-splash-logo { animation: splash-logo-in 0.55s cubic-bezier(0.2, 0.9, 0.2, 1) 0.1s both; }
+
+@keyframes splash-bar {
+  0% { transform: translateX(-100%); }
+  50% { transform: translateX(20%); }
+  100% { transform: translateX(110%); }
+}
+.animate-splash-bar { animation: splash-bar 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+
+/* ==========================================
+   Transitions
+   ========================================== */
+
 .transition-etoro { transition-duration: 200ms; transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1); }
 .transition-etoro-card { transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
 .transition-modal { transition: opacity var(--duration-modal) var(--ease-modal), transform var(--duration-modal) var(--ease-modal); }
@@ -205,11 +276,11 @@ button, a, [role="button"], .cursor-pointer { touch-action: manipulation; -webki
 }
 
 .nav-glass {
-  background: color-mix(in oklab, var(--color-background) 88%, transparent);
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-  box-shadow: 0 -12px 44px rgba(0, 0, 0, 0.65);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  background: color-mix(in oklab, var(--color-background) 92%, transparent);
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.55), 0 -1px 0 rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
 }
 
 .nav-item {
@@ -217,7 +288,7 @@ button, a, [role="button"], .cursor-pointer { touch-action: manipulation; -webki
   transition: transform 160ms cubic-bezier(0.2, 0.9, 0.2, 1), color 200ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 .nav-item:active {
-  transform: scale(0.98);
+  transform: scale(0.94);
 }
 
 @keyframes nav-active-pop {
@@ -243,9 +314,10 @@ button, a, [role="button"], .cursor-pointer { touch-action: manipulation; -webki
 }
 
 /* ==========================================
-   Minimal UI building blocks (MEXC-style)
+   MEXC Premium UI Components
    ========================================== */
 
+/* Cards */
 .panel {
   background: color-mix(in oklab, var(--color-card) 82%, transparent);
   border-radius: 16px;
@@ -256,6 +328,70 @@ button, a, [role="button"], .cursor-pointer { touch-action: manipulation; -webki
   border-radius: 16px;
 }
 
+/* MEXC-style card with subtle border */
+.mexc-card {
+  background: var(--color-card);
+  border: 1px solid rgba(255, 255, 255, 0.055);
+  border-radius: 16px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+/* MEXC input field */
+.mexc-input {
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  color: var(--color-textPrimary);
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.mexc-input:focus-within {
+  border-color: rgba(42, 123, 255, 0.45);
+  background: rgba(42, 123, 255, 0.05);
+}
+
+/* MEXC standard buttons */
+.mexc-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  font-weight: 600;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+}
+.mexc-btn:active {
+  transform: scale(0.97);
+}
+.mexc-btn-primary {
+  background: var(--color-neon);
+  color: #000;
+  box-shadow: 0 4px 16px rgba(42, 123, 255, 0.25);
+}
+.mexc-btn-primary:hover {
+  background: color-mix(in oklab, var(--color-neon) 90%, white);
+  box-shadow: 0 6px 20px rgba(42, 123, 255, 0.35);
+}
+
+/* MEXC badge / pill */
+.mexc-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+/* MEXC glow button effect */
+.mexc-glow {
+  box-shadow: 0 0 16px rgba(42, 123, 255, 0.25), 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+.mexc-glow:hover {
+  box-shadow: 0 0 24px rgba(42, 123, 255, 0.35), 0 4px 16px rgba(0, 0, 0, 0.5);
+}
+
+/* Row list items */
 .list-row {
   background: transparent;
   border-radius: 0;
@@ -267,6 +403,7 @@ button, a, [role="button"], .cursor-pointer { touch-action: manipulation; -webki
   background: rgba(255, 255, 255, 0.03);
 }
 
+/* Segmented control */
 .segmented {
   display: inline-flex;
   gap: 0.25rem;
@@ -276,4 +413,29 @@ button, a, [role="button"], .cursor-pointer { touch-action: manipulation; -webki
 }
 .segmented button {
   border-radius: 999px;
+}
+
+/* P2P Status Banner */
+.p2p-banner {
+  background: linear-gradient(135deg, rgba(42, 123, 255, 0.12) 0%, rgba(42, 123, 255, 0.06) 100%);
+  border: 1px solid rgba(42, 123, 255, 0.2);
+  backdrop-filter: blur(8px);
+}
+
+/* User info chip */
+.user-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-textSecondary);
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

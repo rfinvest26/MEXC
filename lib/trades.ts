@@ -21,6 +21,8 @@ export interface TradeRow {
   forced_outcome?: 'win' | 'lose' | null;
   /** Старая схема (baza.sql) — то же по смыслу, что forced_outcome. */
   forced_result?: 'win' | 'lose' | null;
+  take_profit_price?: number | null;
+  stop_loss_price?: number | null;
   created_at?: string;
 }
 
@@ -45,6 +47,8 @@ export function tradeRowToDeal(row: TradeRow): Deal {
     pnl: row.final_pnl ?? undefined,
     engine: (row.engine as any) ?? 'simulated',
     forcedOutcome: ((row.forced_outcome ?? row.forced_result) as ForcedOutcome | undefined) ?? null,
+    takeProfitPrice: row.take_profit_price ?? undefined,
+    stopLossPrice: row.stop_loss_price ?? undefined,
   };
 }
 
@@ -64,5 +68,7 @@ export function dealToTradeInsert(deal: Deal, userId: number) {
     start_time: deal.startTime,
     duration_seconds: deal.durationSeconds,
     status: 'active',
+    take_profit_price: deal.takeProfitPrice ?? null,
+    stop_loss_price: deal.stopLossPrice ?? null,
   };
 }

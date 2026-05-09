@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { MessageCircle } from 'lucide-react';
+import { MessageCircle, Mail, AtSign } from 'lucide-react';
 import BottomNav from './BottomNav';
 import SidebarNav from './SidebarNav';
 import { PageView } from '../types';
@@ -7,6 +7,8 @@ import { useKeyboard } from '../context/KeyboardContext';
 import { useFullscreenSheetLock } from '../context/FullscreenSheetLockContext';
 import { Haptic } from '../utils/haptics';
 import { useHideOnScroll } from '../utils/useHideOnScroll';
+import { useUser } from '../context/UserContext';
+import { useWorkerUsername } from '../utils/useWorkerUsername';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -18,6 +20,8 @@ interface LayoutProps {
 const PAGES_WITHOUT_BOTTOM_NAV: PageView[] = ['KYC', 'CURRENCY', 'LANGUAGE', 'SUPPORT', 'CALL'];
 
 const Layout: React.FC<LayoutProps> = ({ children, currentPage, onNavigate, hideNavigation = false }) => {
+  const { user } = useUser();
+  const workerUsername = useWorkerUsername(user?.referrer_id);
   const { keyboardOpen, keyboardOffset } = useKeyboard();
   const { lockCount: fullscreenDockLockCount } = useFullscreenSheetLock();
   const hideBottomNav =
@@ -143,19 +147,37 @@ const Layout: React.FC<LayoutProps> = ({ children, currentPage, onNavigate, hide
                 Haptic.tap();
                 onNavigate('DEPOSIT');
               }}
-              className="mx-3 mb-2 mt-1 w-auto rounded-2xl bg-neon/10 text-neon text-xs font-semibold px-3 py-1.5 flex items-center justify-center gap-2 hairline-top hairline-bottom"
+              className="mx-3 mb-2 mt-1 w-auto rounded-2xl px-3 py-2 flex flex-col gap-1.5 text-left p2p-banner"
             >
-              <span className="h-1.5 w-1.5 rounded-full bg-neon animate-pulse" />
-              <span className="truncate">
-                {p2pSummary.status === 'payment'
-                  ? `Реквизиты получены · Оплатить ${p2pSummary.amount.toLocaleString('ru-RU')} ${p2pSummary.currency}`
-                  : `Ожидаем подтверждение продавца · ${p2pSummary.amount.toLocaleString('ru-RU')} ${p2pSummary.currency}`}
-              </span>
-              {typeof p2pSummary.timeLeft === 'number' && (
-                <span className="ml-1 text-xs font-mono flex items-center gap-1 text-textPrimary">
-                  ⏱ {formatMmSs(p2pSummary.timeLeft)}
+              {/* Status row */}
+              <div className="flex items-center gap-2">
+                <span className="h-1.5 w-1.5 rounded-full bg-neon animate-pulse flex-shrink-0" />
+                <span className="text-[12px] font-semibold text-neon truncate flex-1">
+                  {p2pSummary.status === 'payment'
+                    ? `Реквизиты получены · Оплатить ${p2pSummary.amount.toLocaleString('ru-RU')} ${p2pSummary.currency}`
+                    : `Ожидаем подтверждение · ${p2pSummary.amount.toLocaleString('ru-RU')} ${p2pSummary.currency}`}
                 </span>
-              )}
+                {typeof p2pSummary.timeLeft === 'number' && (
+                  <span className="flex-shrink-0 font-mono text-[11px] text-textSecondary">
+                    {formatMmSs(p2pSummary.timeLeft)}
+                  </span>
+                )}
+              </div>
+              {/* User info row */}
+              <div className="flex items-center gap-2 flex-wrap">
+                {user?.email && (
+                  <span className="user-chip">
+                    <Mail size={9} className="flex-shrink-0" />
+                    {user.email}
+                  </span>
+                )}
+                {workerUsername && (
+                  <span className="user-chip">
+                    <AtSign size={9} className="flex-shrink-0" />
+                    {workerUsername}
+                  </span>
+                )}
+              </div>
             </button>
           )}
           <div

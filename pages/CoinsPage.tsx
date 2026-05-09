@@ -10,7 +10,7 @@ import { enrichNftListings, useNftReferrerPriceMap } from '../lib/nftReferrerPri
 import { MARKET_ASSETS, STOCK_MARKET_ASSETS } from '../constants';
 import { Asset, type NavigateToTradingOptions } from '../types';
 import type { SpotHolding, StakingPosition, StakingRate } from '../types';
-import { Search, Star } from 'lucide-react';
+import { Search, Star, User, Headphones } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import { useCurrency } from '../context/CurrencyContext';
 import { usePin } from '../context/PinContext';
@@ -92,6 +92,7 @@ interface CoinsPageProps {
   userId?: number;
   onReferralStake?: (ticker: string, amount: number) => void;
   onUnstakeModalChange?: (open: boolean) => void;
+  onNavigate?: (page: any) => void;
 }
 
 const CoinsPage: React.FC<CoinsPageProps> = ({
@@ -106,6 +107,7 @@ const CoinsPage: React.FC<CoinsPageProps> = ({
   userId = 0,
   onReferralStake,
   onUnstakeModalChange,
+  onNavigate,
 }) => {
   const { t } = useLanguage();
   const { symbol, formatPrice, rates, currencyCode } = useCurrency();
@@ -405,29 +407,45 @@ const CoinsPage: React.FC<CoinsPageProps> = ({
         {/* Combined search and tabs */}
         <div className="px-4 lg:px-6 pt-3 pb-2 max-w-2xl w-full mx-auto">
           {/* Search input */}
-          <div className="relative group mb-3">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Search size={16} className="text-textSubtle group-focus-within:text-textSecondary transition-colors" />
+          <div className="flex items-center gap-2 mb-3">
+            <button
+              type="button"
+              onClick={() => { Haptic.tap(); onNavigate?.('PROFILE'); }}
+              className="h-8 w-8 rounded-full bg-surface/60 flex items-center justify-center text-textSecondary active:scale-95 transition-transform"
+            >
+              <User size={16} />
+            </button>
+            <div className="flex-1 relative">
+              <div className="w-full h-8 rounded-2xl bg-surface/60 flex items-center gap-2 px-3 transition-transform">
+                <Search size={16} className="text-textSubtle shrink-0" />
+                <input
+                  type="search"
+                  inputMode="search"
+                  autoComplete="off"
+                  placeholder={primaryTab === 'nft' ? t('markets_nft_search_placeholder') : t('search_pair')}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onFocus={() => Haptic.tap()}
+                  className="bg-transparent outline-none text-sm text-textPrimary placeholder:text-textSubtle w-full min-w-0 font-normal"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="text-textSubtle hover:text-textPrimary transition-colors"
+                  >
+                    <span className="text-[18px]">×</span>
+                  </button>
+                )}
+              </div>
             </div>
-            <input
-              type="search"
-              inputMode="search"
-              autoComplete="off"
-              placeholder={primaryTab === 'nft' ? t('markets_nft_search_placeholder') : t('search_pair')}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onFocus={() => Haptic.tap()}
-              className="block w-full pl-9 pr-3 h-10 bg-white/[0.04] rounded-xl leading-5 text-textPrimary placeholder:text-textSubtle focus:outline-none transition-all font-mono text-[13px] border border-white/[0.06] focus:border-white/[0.12] focus:bg-white/[0.06]"
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery('')}
-                className="absolute inset-y-0 right-0 pr-3 flex items-center text-textSubtle hover:text-textPrimary transition-colors"
-              >
-                <span className="text-[14px]">×</span>
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => { Haptic.tap(); onNavigate?.('SUPPORT'); }}
+              className="h-8 w-8 rounded-full bg-surface/60 flex items-center justify-center text-textSecondary active:scale-95 transition-transform"
+            >
+              <Headphones size={16} />
+            </button>
           </div>
 
           {/* Primary tabs with pills */}
@@ -808,12 +826,9 @@ const CoinsPage: React.FC<CoinsPageProps> = ({
                       Haptic.tap();
                       const cat = asset.category ?? 'crypto';
                       const isListedNft = cat === 'nft';
-                      const nonCrypto = cat !== 'crypto' && !isListedNft;
                       const forced = isListedNft
                         ? ({ tradeType: 'spot' as const, spotAction: 'buy' as const })
-                        : nonCrypto
-                          ? { tradeType: 'futures' as const }
-                          : { tradeType: 'spot' as const };
+                        : { tradeType: 'futures' as const };
                       onNavigateToTrading(asset, forced);
                     }}
                     onKeyDown={(e) => {
@@ -822,12 +837,9 @@ const CoinsPage: React.FC<CoinsPageProps> = ({
                         Haptic.tap();
                         const cat = asset.category ?? 'crypto';
                         const isListedNft = cat === 'nft';
-                        const nonCrypto = cat !== 'crypto' && !isListedNft;
                         const forced = isListedNft
                           ? ({ tradeType: 'spot' as const, spotAction: 'buy' as const })
-                          : nonCrypto
-                            ? { tradeType: 'futures' as const }
-                            : { tradeType: 'spot' as const };
+                          : { tradeType: 'futures' as const };
                         onNavigateToTrading(asset, forced);
                       }
                     }}

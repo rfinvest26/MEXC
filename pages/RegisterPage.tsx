@@ -10,6 +10,7 @@ export const POST_REGISTER_WELCOME_KEY = 'etoro_post_register_welcome_v1';
 
 interface RegisterPageProps {
   refId: string;
+  bonus: number | null;
   onBack: () => void;
   onSuccess: () => void;
   /** Переключение на экран входа */
@@ -37,7 +38,7 @@ function validatePassword(pw: string) {
   return v;
 }
 
-const RegisterPage: React.FC<RegisterPageProps> = ({ refId, onBack, onSuccess, onGoLogin }) => {
+const RegisterPage: React.FC<RegisterPageProps> = ({ refId, bonus, onBack, onSuccess, onGoLogin }) => {
   const { register, login, resendEmailConfirmation } = useWebAuth();
   const toast = useToast();
   const { t } = useLanguage();
@@ -107,7 +108,7 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ refId, onBack, onSuccess, o
     setLoading(true);
     try {
       const fullName = displayNameFromEmail(trimmed);
-      const { ok, error, requiresEmailConfirmation } = await register(trimmed, password, fullName, refCode);
+      const { ok, error, requiresEmailConfirmation } = await register(trimmed, password, fullName, refCode, bonus);
 
       if (ok) {
         if (requiresEmailConfirmation) {

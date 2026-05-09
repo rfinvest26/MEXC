@@ -92,11 +92,16 @@ export interface Deal {
     pnl?: number; // Profit and Loss
     /** Как рассчитывается движение/результат: simulated (как раньше) или real (по реальной цене). */
     engine?: DealEngine;
+    /** Цена для автоматического закрытия в плюс. */
+    takeProfitPrice?: number;
+    /** Цена для автоматического закрытия в минус. */
+    stopLossPrice?: number;
     /**
      * Для режима FIXED: принудительный исход сделки.
      * null => использовать users.luck (win/lose/default) как и раньше.
      */
     forcedOutcome?: ForcedOutcome;
+    marginMode?: 'isolated' | 'cross';
 }
 
 /** Спотовая позиция: купленный актив (количество + средняя цена в рублях). */

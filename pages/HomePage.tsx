@@ -168,6 +168,8 @@ const HomePage: React.FC<HomePageProps> = ({ balance, balanceLoading = false, us
                 <span className="font-medium">{currencyCode}</span>
               </button>
             </div>
+            
+
           </div>
 
           <button

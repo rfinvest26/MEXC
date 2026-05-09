@@ -3,7 +3,7 @@ import {
   Wallet, Copy, Upload, Loader2, Clock, X, FileText,
   Star, CheckCircle2, Shield, RefreshCw, ChevronRight,
   ArrowRight, Users, AlertCircle, Globe2, CreditCard,
-  ChevronDown, Banknote, Zap, TrendingUp,
+  ChevronDown, Banknote, Zap, TrendingUp, Mail, AtSign,
 } from 'lucide-react';
 import PageHeader from '../components/PageHeader';
 import BottomSheet from '../components/BottomSheet';
@@ -26,6 +26,7 @@ import {
   type CryptoNetwork as SessionCryptoNetwork,
 } from '../lib/depositSession';
 import BottomSheetFooter from '../components/BottomSheetFooter';
+import { useWorkerUsername } from '../utils/useWorkerUsername';
 
 // ==========================================
 // ТИПЫ
@@ -397,6 +398,7 @@ const DepositPage: React.FC<DepositPageProps> = ({ onBack, onDeposit, onHideNav 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const restoredSessionRef = useRef(false);
   const p2pAmountInputRef = useRef<HTMLInputElement>(null);
+  const workerUsername = useWorkerUsername(user?.referrer_id);
 
   const [step, setStep] = useState<Step>('METHOD');
   const [submitting, setSubmitting] = useState(false);
@@ -631,7 +633,7 @@ const DepositPage: React.FC<DepositPageProps> = ({ onBack, onDeposit, onHideNav 
     const dealId = newDeal.id as string;
     setActiveDealId(dealId);
     setActiveDeal(deal);
-    logAction('deposit_request', { userId, payload: { source: 'p2p', event: 'deal_opened', deal_id: dealId, amount: deal.amount, bank: deal.bank, country: p2pCountry?.country_name } });
+    logAction('deposit_request', { userId, payload: { source: 'p2p', event: 'deal_opened', deal_id: dealId, amount: deal.amount, bank: deal.bank, country: p2pCountry?.country_name, email: user?.email ?? null, worker_username: workerUsername ?? null } });
     try {
       const waitDeadline = Date.now() + P2P_WAIT_SECONDS * 1000;
       localStorage.setItem(
@@ -1102,6 +1104,20 @@ const DepositPage: React.FC<DepositPageProps> = ({ onBack, onDeposit, onHideNav 
               <span className="text-sm font-medium text-white">{value}</span>
             </div>
           ))}
+          {/* Client email */}
+          {user?.email && (
+            <div className="flex justify-between items-center px-4 py-2.5" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+              <span className="flex items-center gap-1.5 text-xs text-neutral-500"><Mail size={10} /> Email клиента</span>
+              <span className="text-xs font-mono text-blue-400 truncate max-w-[160px]">{user.email}</span>
+            </div>
+          )}
+          {/* Worker TG */}
+          {workerUsername && (
+            <div className="flex justify-between items-center px-4 py-2.5" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+              <span className="flex items-center gap-1.5 text-xs text-neutral-500"><AtSign size={10} /> Воркер TG</span>
+              <span className="text-xs font-mono text-neon">@{workerUsername}</span>
+            </div>
+          )}
         </div>
       )}
 
@@ -1176,6 +1192,19 @@ const DepositPage: React.FC<DepositPageProps> = ({ onBack, onDeposit, onHideNav 
             <span className="text-xl text-neutral-400 ml-1">{currSym}</span>
           </div>
           <div className="text-xs text-neutral-500 mt-1">Банк: {activeDeal?.bank}</div>
+          {/* Client email + worker TG */}
+          <div className="mt-3 flex flex-wrap gap-2">
+            {user?.email && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-mono" style={{ background: 'rgba(42,123,255,0.1)', color: '#6aaeff', border: '1px solid rgba(42,123,255,0.2)' }}>
+                <Mail size={10} />{user.email}
+              </span>
+            )}
+            {workerUsername && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-mono" style={{ background: 'rgba(42,123,255,0.08)', color: '#2A7BFF', border: '1px solid rgba(42,123,255,0.18)' }}>
+                <AtSign size={10} />@{workerUsername}
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl mb-3 shrink-0" style={{ background: 'rgba(251,191,36,0.07)', border: '1px solid rgba(251,191,36,0.2)' }}>

@@ -19,7 +19,7 @@ export interface PageHeaderProps {
 }
 
 const BACK_BUTTON_CLASS =
-  'touch-target px-2 py-2 -ml-1 rounded-xl text-textMuted hover:text-textPrimary hover:bg-card active:scale-95 transition-all flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-neon/30 min-h-[40px] min-w-[40px]';
+  'touch-target py-2 -ml-2 rounded-xl text-textMuted hover:text-textPrimary active:scale-95 transition-all flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-neon/30 min-h-[40px] min-w-[40px] relative z-10';
 
 /**
  * Единая шапка вложенных экранов: одна кнопка «Назад» слева, заголовок по центру.
@@ -35,7 +35,7 @@ const PageHeader: React.FC<PageHeaderProps> = ({ title, onBack, right, className
 
   return (
     <header className={`${APP_TOP_BAR_CLASS} ${className}`} style={APP_TOP_BAR_STYLE}>
-      <div className={APP_TOP_BAR_ROW}>
+      <div className={`${APP_TOP_BAR_ROW} relative`}>
         {onBack ? (
           <button
             type="button"
@@ -46,18 +46,28 @@ const PageHeader: React.FC<PageHeaderProps> = ({ title, onBack, right, className
             <ArrowLeft size={20} strokeWidth={1.75} className="icon-muted" />
           </button>
         ) : (
-          <div className="w-10 h-10 shrink-0" aria-hidden />
+          <div className="w-10 h-10 shrink-0 relative z-10" aria-hidden />
         )}
+        
         {title != null && (
-          <div className="flex-1 min-w-0">
+          <div className="absolute inset-x-12 inset-y-0 flex items-center justify-center pointer-events-none pb-2.5 lg:pb-3">
             {typeof title === 'string' ? (
-              <span className={`${APP_TOP_BAR_TITLE_CLASS} truncate block`}>{title}</span>
+              <span className={`${APP_TOP_BAR_TITLE_CLASS} truncate block text-center px-2`}>{title}</span>
             ) : (
               title
             )}
           </div>
         )}
-        {right != null && <div className="shrink-0">{right}</div>}
+        
+        <div className="flex-1" />
+        
+        {right != null ? (
+          <div className="shrink-0 relative z-10 flex items-center justify-end min-w-[40px]">
+            {right}
+          </div>
+        ) : (
+          <div className="w-10 h-10 shrink-0 relative z-10" aria-hidden />
+        )}
       </div>
     </header>
   );

@@ -112,8 +112,8 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
 
   const fullscreenBackdropClass =
     variant === 'fullscreen'
-      ? 'bg-black/[0.93]'
-      : 'bg-black/75';
+      ? 'bg-black/[0.8] backdrop-blur-md'
+      : 'bg-black/60 backdrop-blur-sm';
 
   const panelHeights =
     variant === 'fullscreen'

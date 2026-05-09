@@ -13,6 +13,7 @@ import {
   APP_TOP_BAR_ROW,
   APP_TOP_BAR_STYLE,
 } from '../components/appTopBar';
+import NftHorizontalStrip from '../components/NftHorizontalStrip';
 
 interface NFTDetailPageProps {
   listing: NftListingRow;
@@ -151,46 +152,6 @@ const NFTDetailPage: React.FC<NFTDetailPageProps> = ({ listing, onBack, onTrade 
             </div>
           </div>
 
-          <div className="mt-2 flex items-center gap-1.5">
-            <button
-              type="button"
-              aria-label={t('nft_sheet_prev')}
-              disabled={index <= 0}
-              onClick={() => goSibling(-1)}
-              className="h-9 w-9 rounded-lg bg-white/[0.05] flex items-center justify-center text-textSecondary disabled:opacity-25 active:opacity-70"
-            >
-              <ChevronLeft size={20} />
-            </button>
-            <div className="flex-1 flex gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-              {siblings.map((s) => {
-                const sel = s.codeKey === display.codeKey;
-                return (
-                  <button
-                    key={s.codeKey}
-                    type="button"
-                    onClick={() => {
-                      Haptic.tap();
-                      setDisplay(s);
-                    }}
-                    className={`relative shrink-0 w-12 h-12 rounded-lg overflow-hidden transition-opacity ${
-                      sel ? 'opacity-100 outline outline-2 outline-neon outline-offset-0' : 'opacity-70'
-                    }`}
-                  >
-                    <img src={s.imageUrl} alt="" className="w-full h-full object-cover" />
-                  </button>
-                );
-              })}
-            </div>
-            <button
-              type="button"
-              aria-label={t('nft_sheet_next')}
-              disabled={index < 0 || index >= siblings.length - 1}
-              onClick={() => goSibling(1)}
-              className="h-9 w-9 rounded-lg bg-white/[0.05] flex items-center justify-center text-textSecondary disabled:opacity-25 active:opacity-70"
-            >
-              <ChevronRight size={20} />
-            </button>
-          </div>
         </div>
 
         <div className="px-4 mt-4 space-y-3">
@@ -260,8 +221,21 @@ const NFTDetailPage: React.FC<NFTDetailPageProps> = ({ listing, onBack, onTrade 
 
           <p className="text-[10px] text-textMuted leading-relaxed px-0.5 pb-4">{t('nft_spot_disclaimer')}</p>
         </div>
-      </div>
 
+        <div className="mt-4 border-t border-white/[0.05] bg-black/10">
+          <NftHorizontalStrip 
+            title={t('nft_more_from_collection') || "More from this collection"}
+            items={siblings}
+            activeCodeKey={display.codeKey}
+            onItemClick={(item) => {
+              setDisplay(item);
+              // Scroll to top when switching
+              const container = document.querySelector('.overflow-y-auto');
+              if (container) container.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+          />
+        </div>
+      </div>
     </div>
   );
 };

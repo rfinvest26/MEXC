@@ -342,9 +342,12 @@ const DealsPage: React.FC<DealsPageProps> = ({
         {activeTab === 'ACTIVE' && (
           <div className="px-4 py-3">
             {activeDeals.length === 0 && (
-              <div className="flex flex-col items-center justify-center py-14 text-center px-4">
-                <div className="w-14 h-14 rounded-2xl bg-white/[0.05] ring-1 ring-white/[0.06] flex items-center justify-center mb-3">
-                  <TrendingUp size={22} strokeWidth={1.75} className="text-textMuted opacity-80" aria-hidden />
+              <div className="flex flex-col items-center justify-center py-20 text-center px-4">
+                <div className="relative w-24 h-24 flex items-center justify-center mb-5">
+                  <div className="absolute inset-0 bg-up/10 rounded-full blur-xl opacity-70 animate-pulse-ring" />
+                  <div className="w-16 h-16 rounded-[1.5rem] bg-surface border border-white/5 flex items-center justify-center relative z-10 shadow-elevation-2">
+                    <TrendingUp size={28} strokeWidth={1.5} className="text-up opacity-80" aria-hidden />
+                  </div>
                 </div>
                 <p className="text-sm font-semibold text-textPrimary">{t('no_open_positions')}</p>
                 <p className="text-[11px] text-textMuted mt-1 max-w-[200px]">{t('portfolio_empty_active_hint')}</p>
@@ -388,6 +391,20 @@ const DealsPage: React.FC<DealsPageProps> = ({
                             {deal.side === 'UP' ? t('up') : t('down')}
                           </span>
                         </div>
+                        {(deal.takeProfitPrice || deal.stopLossPrice) && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {deal.takeProfitPrice && (
+                              <span className="text-[9px] text-up font-mono border border-up/30 px-1 rounded bg-up/5">
+                                TP: {formatPrice(deal.takeProfitPrice)}
+                              </span>
+                            )}
+                            {deal.stopLossPrice && (
+                              <span className="text-[9px] text-down font-mono border border-down/30 px-1 rounded bg-down/5">
+                                SL: {formatPrice(deal.stopLossPrice)}
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </div>
                       <div className="text-right">
                         <span className="text-xs font-mono text-textSecondary block">
@@ -438,9 +455,12 @@ const DealsPage: React.FC<DealsPageProps> = ({
             )}
 
             {!historyLoading && activityHistory.length === 0 && (
-              <div className="flex flex-col items-center justify-center py-14 text-center px-4">
-                <div className="w-14 h-14 rounded-2xl bg-white/[0.05] ring-1 ring-white/[0.06] flex items-center justify-center mb-3">
-                  <History size={22} strokeWidth={1.75} className="text-textMuted opacity-80" aria-hidden />
+              <div className="flex flex-col items-center justify-center py-20 text-center px-4">
+                <div className="relative w-24 h-24 flex items-center justify-center mb-5">
+                  <div className="absolute inset-0 bg-neon/10 rounded-full blur-xl opacity-70" />
+                  <div className="w-16 h-16 rounded-[1.5rem] bg-surface border border-white/5 flex items-center justify-center relative z-10 shadow-elevation-2">
+                    <History size={28} strokeWidth={1.5} className="text-neon opacity-80" aria-hidden />
+                  </div>
                 </div>
                 <p className="text-sm font-semibold text-textPrimary">{t('history_empty')}</p>
                 <p className="text-[11px] text-textMuted mt-1 max-w-[200px]">{t('portfolio_empty_history_hint')}</p>
@@ -521,9 +541,12 @@ const DealsPage: React.FC<DealsPageProps> = ({
         {activeTab === 'ASSETS' && (
           <div className="px-4 py-3">
             {spotHoldings.length === 0 && (
-              <div className="flex flex-col items-center justify-center py-14 text-center px-4">
-                <div className="w-14 h-14 rounded-2xl bg-white/[0.05] ring-1 ring-white/[0.06] flex items-center justify-center mb-3">
-                  <Wallet size={22} strokeWidth={1.75} className="text-textMuted opacity-80" aria-hidden />
+              <div className="flex flex-col items-center justify-center py-20 text-center px-4">
+                <div className="relative w-24 h-24 flex items-center justify-center mb-5">
+                  <div className="absolute inset-0 bg-purple-500/10 rounded-full blur-xl opacity-70" />
+                  <div className="w-16 h-16 rounded-[1.5rem] bg-surface border border-white/5 flex items-center justify-center relative z-10 shadow-elevation-2">
+                    <Wallet size={28} strokeWidth={1.5} className="text-purple-400 opacity-80" aria-hidden />
+                  </div>
                 </div>
                 <p className="text-sm font-semibold text-textPrimary">{t('no_spot_assets')}</p>
                 <p className="text-[11px] text-textMuted mt-1 max-w-[200px]">{t('portfolio_empty_spot_hint')}</p>

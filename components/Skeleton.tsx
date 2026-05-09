@@ -4,13 +4,14 @@ import clsx from 'clsx';
 interface SkeletonProps {
   className?: string;
   rounded?: boolean;
+  shimmer?: boolean;
 }
 
-const Skeleton: React.FC<SkeletonProps> = ({ className = '', rounded = true }) => {
+const Skeleton: React.FC<SkeletonProps> = ({ className = '', rounded = true, shimmer = true }) => {
   return (
     <div
       className={clsx(
-        'bg-neutral-800/80 animate-pulse',
+        shimmer ? 'skeleton-shimmer' : 'animate-pulse bg-neutral-800/80',
         rounded ? 'rounded-lg' : '',
         className,
       )}
@@ -19,4 +20,3 @@ const Skeleton: React.FC<SkeletonProps> = ({ className = '', rounded = true }) =
 };
 
 export default Skeleton;
-

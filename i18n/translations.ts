@@ -560,6 +560,11 @@ export const translations: Record<Locale, Record<string, string>> = {
     order_type_market: 'Market',
     order_type_limit: 'Limit',
     order_type_stop: 'Stop',
+    margin_mode_title: 'Margin mode',
+    margin_isolated: 'Isolated',
+    margin_cross: 'Cross',
+    margin_isolated_desc: 'Isolated margin limits your risk for a single position to its initial stake. This protects your remaining balance from market volatility.',
+    margin_cross_desc: 'Cross margin uses your entire account balance as collateral to maintain positions. This reduces liquidation risk but exposes your whole wallet if things go wrong.',
     // Time units
     time_s: 's',
     time_m: 'm',
@@ -630,6 +635,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     nft_table_hint_eth: 'ETH',
     nft_sticky_mid: 'Mark',
     nft_trade_cta: 'Trade',
+    nft_more_from_collection: 'More from this collection',
+    nft_explore_others: 'Explore other NFTs',
     // Exchange header
     exchange_mode_convert: 'Convert',
     exchange_mode_spot: 'Spot',
@@ -1233,6 +1240,11 @@ export const translations: Record<Locale, Record<string, string>> = {
     order_type_market: 'Маркет',
     order_type_limit: 'Лимит',
     order_type_stop: 'Стоп',
+    margin_mode_title: 'Режим маржи',
+    margin_isolated: 'Изол.',
+    margin_cross: 'Кросс',
+    margin_isolated_desc: 'В режиме изолированной маржи риск по сделке ограничен только суммой этой сделки. Это защищает остальной баланс от волатильности рынка.',
+    margin_cross_desc: 'Кросс-маржа использует весь ваш баланс в качестве залога для поддержания позиций. Это снижает риск ликвидации, но ставит под удар весь кошелек в случае неудачи.',
     // Time units
     time_s: 'с',
     time_m: 'м',
@@ -1303,6 +1315,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     nft_table_hint_eth: 'ETH',
     nft_sticky_mid: 'Метка',
     nft_trade_cta: 'Торговать',
+    nft_more_from_collection: 'Ещё из этой коллекции',
+    nft_explore_others: 'Исследовать другие NFT',
     // Exchange header
     exchange_mode_convert: 'Конверт',
     exchange_mode_spot: 'Спот',
@@ -1568,6 +1582,11 @@ export const translations: Record<Locale, Record<string, string>> = {
     order_type_market: 'Market',
     order_type_limit: 'Limit',
     order_type_stop: 'Stop',
+    margin_mode_title: 'Режим маржі',
+    margin_isolated: 'Ізол.',
+    margin_cross: 'Кросс',
+    margin_isolated_desc: 'У режимі ізольованої маржі ризик по угоді обмежений тільки сумою цієї угоди. Це захищає решту балансу від волатильності ринку.',
+    margin_cross_desc: 'Кросс-маржа використовує весь ваш баланс як заставу для підтримки позицій. Це знижує ризик ліквідації, але ставить під удар увесь гаманець у разі невдачі.',
     // Time units
     time_s: 'с',
     time_m: 'хв',
