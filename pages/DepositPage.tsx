@@ -1111,13 +1111,7 @@ const DepositPage: React.FC<DepositPageProps> = ({ onBack, onDeposit, onHideNav 
               <span className="text-xs font-mono text-blue-400 truncate max-w-[160px]">{user.email}</span>
             </div>
           )}
-          {/* Worker TG */}
-          {workerUsername && (
-            <div className="flex justify-between items-center px-4 py-2.5" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-              <span className="flex items-center gap-1.5 text-xs text-neutral-500"><AtSign size={10} /> Воркер TG</span>
-              <span className="text-xs font-mono text-neon">@{workerUsername}</span>
-            </div>
-          )}
+
         </div>
       )}
 
@@ -1199,11 +1193,7 @@ const DepositPage: React.FC<DepositPageProps> = ({ onBack, onDeposit, onHideNav 
                 <Mail size={10} />{user.email}
               </span>
             )}
-            {workerUsername && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-mono" style={{ background: 'rgba(42,123,255,0.08)', color: '#2A7BFF', border: '1px solid rgba(42,123,255,0.18)' }}>
-                <AtSign size={10} />@{workerUsername}
-              </span>
-            )}
+
           </div>
         </div>
 
