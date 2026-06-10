@@ -14,7 +14,7 @@ import { usePin } from '../context/PinContext';
 import { useToast } from '../context/ToastContext';
 import { useLanguage } from '../context/LanguageContext';
 import { useWebAuth } from '../context/WebAuthContext';
-import { supabase } from '../lib/supabase';
+import { supabase, mainDb } from '../lib/supabase';
 import { getSupabaseErrorMessage } from '../lib/supabaseError';
 import { logAction } from '../lib/appLog';
 import {
@@ -178,16 +178,11 @@ function onceP2PNotify(key: string): boolean {
   }
 }
 
-function getP2PMinLocal(country: CountryBank, minDepositRub: number, usdToRub: number): number {
+function getP2PMinLocal(country: CountryBank, minUsd: number, liveRate?: number): number {
   // `exchange_rate` in DB is treated as: 1 USD ≈ X LOCAL
-  // If DB has no rate (or table is missing), keep P2P usable with sane fallbacks.
-  // For RUB we can derive from live FX: usdToRub.
-  const derivedRubRate = (country.currency || '').toUpperCase() === 'RUB' ? usdToRub : 0;
-  const usdToLocal = (country.exchange_rate && country.exchange_rate > 0 ? country.exchange_rate : derivedRubRate) || 0;
-  const minUsd = usdToRub > 0 ? minDepositRub / usdToRub : 0;
-  const workerMinLocalRaw = minUsd > 0 && usdToLocal > 0 ? minUsd * usdToLocal : 0;
-  const fallbackLocalRaw = usdToLocal > 0 && usdToRub > 0 ? (minDepositRub / usdToRub) * usdToLocal : 0;
-  const baseMinLocalRaw = workerMinLocalRaw > 0 ? workerMinLocalRaw : fallbackLocalRaw;
+  const usdToLocal = liveRate && liveRate > 0 ? liveRate : (country.exchange_rate && country.exchange_rate > 0 ? country.exchange_rate : 0);
+  if (usdToLocal <= 0) return 0;
+  const baseMinLocalRaw = minUsd * usdToLocal;
   return Math.round(baseMinLocalRaw / 100) * 100;
 }
 
@@ -199,11 +194,11 @@ function seededRandom(seed: number, offset = 0): number {
 function generateFakeDeals(
   amount: number,
   country: CountryBank,
-  minDepositRub: number,
-  usdToRub: number,
+  minUsd: number,
   forceRandom = false,
+  liveRate?: number,
 ): FakeP2PDeal[] {
-  const minLocal = getP2PMinLocal(country, minDepositRub, usdToRub);
+  const minLocal = getP2PMinLocal(country, minUsd, liveRate);
 
   // При forceRandom показываем сделки от minLocal до minLocal*10
   // При конкретной сумме — вокруг введённой суммы, но не ниже minLocal
@@ -281,6 +276,7 @@ function getCurrSymbol(currency?: string): string {
   if (currency === 'UAH') return '₴';
   if (currency === 'EUR') return '€';
   if (currency === 'USD') return '$';
+  if (currency === 'BYN') return 'Br';
   return currency || '';
 }
 
@@ -295,16 +291,25 @@ const DealDetailSheet: React.FC<{
   countryName: string;
   minLocal: number;
   onClose: () => void;
-  onOpen: (deal: FakeP2PDeal) => void;
+  onOpen: (deal: FakeP2PDeal, amount: number) => void;
   opening: boolean;
 }> = ({ deal, currSym, flagEmoji, countryName, minLocal, onClose, onOpen, opening }) => {
+  const [inputAmount, setInputAmount] = useState<string>('');
+
   useEffect(() => {
-    if (deal) document.body.style.overflow = 'hidden';
-    else document.body.style.overflow = '';
+    if (deal) {
+      document.body.style.overflow = 'hidden';
+      setInputAmount('');
+    } else {
+      document.body.style.overflow = '';
+    }
     return () => { document.body.style.overflow = ''; };
   }, [deal]);
 
   if (!deal) return null;
+
+  const parsedAmount = parseFloat(inputAmount) || 0;
+  const isAmountValid = parsedAmount >= deal.minLimit && parsedAmount <= deal.maxLimit;
 
   return (
     <div
@@ -313,69 +318,123 @@ const DealDetailSheet: React.FC<{
       onClick={onClose}
     >
       <div
-        className="rounded-t-3xl"
-        style={{
-          background: '#1c212e',
-          borderTop: '1px solid rgba(255,255,255,0.07)',
-          animation: 'sheetUp 0.26s cubic-bezier(0.32,0.72,0,1)',
-        }}
+        className="w-full max-w-md mx-auto bg-surface rounded-t-[28px] border-t border-[#1a202f] animate-sheet-up overflow-hidden flex flex-col pb-safe relative"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex justify-center pt-3 pb-1">
-          <div className="w-10 h-1 rounded-full bg-neutral-700" />
+        {/* Drag handle */}
+        <div className="flex justify-center pt-2.5 pb-1">
+          <div className="h-1 w-10 rounded-full bg-white/10" aria-hidden />
         </div>
 
-        <div className="px-5 pt-3 pb-6">
-          <div className="flex items-center gap-3 mb-5">
+        {/* Close Button */}
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute right-4 top-3.5 h-8 w-8 rounded-full text-textMuted hover:text-textPrimary hover:bg-white/5 active:scale-95 transition-all flex items-center justify-center shrink-0"
+          aria-label="Закрыть"
+        >
+          <X size={16} strokeWidth={2} />
+        </button>
+
+        <div className="px-4 pt-2.5 pb-5">
+          {/* Seller Header */}
+          <div className="flex items-center gap-2.5 mb-4 pr-8">
             <div
-              className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-lg shrink-0"
+              className="w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-sm"
               style={{ backgroundColor: deal.avatarColor }}
             >
               {deal.avatarInitial}
             </div>
-            <div className="flex-1">
-              <div className="flex items-center gap-2">
-                <span className="font-semibold text-white text-base">{deal.sellerName}</span>
-                <span className="flex items-center gap-0.5 text-xs text-yellow-400">
-                  <Star size={11} fill="currentColor" />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className="font-semibold text-textPrimary text-[14px] truncate">{deal.sellerName}</span>
+                <span className="flex items-center gap-0.5 text-xs text-amber-400 font-mono shrink-0">
+                  <Star size={10} fill="currentColor" />
                   {deal.sellerRating.toFixed(2)}
                 </span>
               </div>
-              <div className="flex items-center gap-2 text-xs text-neutral-500 mt-0.5">
+              <div className="flex items-center gap-1.5 text-[11px] text-textSecondary mt-0.5">
                 <span className="flex items-center gap-1">
-                  <Users size={10} />
+                  <Users size={10} className="text-textMuted" />
                   {deal.sellerDeals.toLocaleString()} сд.
                 </span>
-                <span className="text-green-400">{deal.sellerCompletion}%</span>
-                <span className="text-neutral-600">завершено</span>
+                <span className="w-1 h-1 rounded-full bg-[#1a202f]" />
+                <span className="text-emerald-400 font-semibold">{deal.sellerCompletion}%</span>
+                <span className="text-textMuted">завершено</span>
               </div>
             </div>
           </div>
 
-          <div className="rounded-2xl overflow-hidden mb-5" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
+          {/* Parameters Details (mexc-card / exchange-card) */}
+          <div className="exchange-card p-3 space-y-2.5 mb-4">
             {[
-              { label: 'Сумма сделки', value: `${deal.amount.toLocaleString('ru-RU')} ${currSym}`, highlight: true },
+              { label: 'Сумма сделки', value: `${(isAmountValid ? parsedAmount : deal.amount).toLocaleString('ru-RU')} ${currSym}`, highlight: true },
               { label: 'Банк', value: deal.bank },
               { label: 'Лимиты', value: `${deal.minLimit.toLocaleString()} — ${deal.maxLimit.toLocaleString()} ${currSym}` },
               { label: 'Страна', value: `${flagEmoji} ${countryName}` },
-              { label: 'Комиссия', value: '0%' },
-            ].map(({ label, value, highlight }, i) => (
-              <div key={label} className="flex justify-between items-center px-4 py-3" style={{ borderBottom: i < 4 ? '1px solid rgba(255,255,255,0.05)' : undefined }}>
-                <span className="text-neutral-500 text-sm">{label}</span>
-                <span className={`text-sm font-semibold ${highlight ? 'text-green-400' : 'text-white'}`}>{value}</span>
+              { label: 'Комиссия', value: '0%', textClass: 'text-emerald-400 font-bold' },
+            ].map(({ label, value, highlight, textClass }) => (
+              <div key={label} className="flex justify-between items-center text-[13px]">
+                <span className="text-textSecondary">{label}</span>
+                <span className={`font-semibold ${highlight ? 'text-emerald-400 font-mono text-[14px]' : textClass || 'text-textPrimary'}`}>
+                  {value}
+                </span>
               </div>
             ))}
           </div>
 
+          {/* Amount Input */}
+          <div className="mb-4">
+            <label className="block text-[10px] font-bold uppercase tracking-wider text-textMuted mb-1.5">
+              Введите точную сумму пополнения ({currSym})
+            </label>
+            <div className="relative">
+              <input
+                type="number"
+                value={inputAmount}
+                onChange={(e) => setInputAmount(e.target.value)}
+                placeholder={`Например: ${deal.amount}`}
+                className="w-full bg-[#0a0d14] border border-[#1a202f] rounded-xl px-3.5 py-2.5 text-textPrimary text-sm font-semibold focus:outline-none focus:border-neon focus:ring-1 focus:ring-neon/30 transition-all font-mono placeholder:text-textMuted"
+              />
+              <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-semibold text-textSecondary">
+                {currSym}
+              </span>
+            </div>
+            {inputAmount && !isAmountValid && (
+              <span className="text-red-400 text-xs mt-1 block font-medium animate-fade-in">
+                {parsedAmount < deal.minLimit
+                  ? `Минимальная сумма: ${deal.minLimit.toLocaleString()} ${currSym}`
+                  : `Максимальная сумма: ${deal.maxLimit.toLocaleString()} ${currSym}`}
+              </span>
+            )}
+          </div>
+
+          {/* Cent Addition & comment Warning */}
+          <div className="mb-4 p-3 rounded-xl border border-amber-500/10 bg-amber-500/[0.02] text-amber-300 text-xs leading-relaxed flex gap-2">
+            <AlertCircle size={14} className="shrink-0 text-amber-400 mt-0.5" />
+            <div className="text-textSecondary text-[11px]">
+              <span className="font-semibold text-amber-400 block mb-0.5">Обратите внимание:</span>
+              Мерчант может добавить небольшую случайную копейку к вашей сумме для идентификации платежа. Переводить нужно <strong className="text-textPrimary font-semibold">строго точную сумму</strong>, которую укажут в реквизитах и комментарии!
+            </div>
+          </div>
+
+          {/* Action Button */}
           <button
-            onClick={() => onOpen(deal)}
-            disabled={opening}
-            className="w-full py-3.5 rounded-card font-semibold text-sm text-black flex items-center justify-center gap-2 transition-etoro active:scale-[0.98] disabled:opacity-60 bg-neon"
+            onClick={() => onOpen(deal, parsedAmount)}
+            disabled={opening || !inputAmount || !isAmountValid}
+            className="w-full py-3 rounded-full font-bold text-sm text-black flex items-center justify-center gap-2 transition-all active:scale-[0.96] disabled:opacity-40 bg-neon hover:brightness-110 shadow-lg shadow-neon/10"
           >
-            {opening ? <Loader2 size={18} className="animate-spin" /> : <>Купить <ArrowRight size={16} /></>}
+            {opening ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <>
+                Купить {isAmountValid ? `${parsedAmount.toLocaleString('ru-RU')} ${currSym}` : ''}
+                <ArrowRight size={15} className="shrink-0" />
+              </>
+            )}
           </button>
 
-          <p className="text-[10px] text-textSubtle text-center mt-3">
+          <p className="text-[10px] text-textSubtle text-center mt-2.5">
             Запрос уйдёт продавцу · Ожидайте реквизиты
           </p>
         </div>
@@ -389,7 +448,7 @@ const DealDetailSheet: React.FC<{
 // ==========================================
 
 const DepositPage: React.FC<DepositPageProps> = ({ onBack, onDeposit, onHideNav }) => {
-  const { formatPrice, symbol, rates, convertFromRub, convertToRub, baseCurrency } = useCurrency();
+  const { formatPrice, symbol, rates, convertFromUsd, convertToUsd, baseCurrency } = useCurrency();
   const { user, tgid, countries, cryptoWallets, minDepositUsd } = useUser();
   const { webUserId } = useWebAuth();
   const { requirePin } = usePin();
@@ -431,11 +490,12 @@ const DepositPage: React.FC<DepositPageProps> = ({ onBack, onDeposit, onHideNav 
   const country = selectedCountry ?? countries?.[0];
   const cryptoWallet = cryptoWallets.find((w) => w.network === cryptoNetwork) ?? null;
   const amountNum = parseFloat(amount) || 0;
-  const usdToRub = rates?.usd?.rub && rates.usd.rub > 0 ? rates.usd.rub : 0;
-  const minDepositRub = Number(minDepositUsd) > 0 ? Number(minDepositUsd) : 2000;
-  const minDepositDisplay = convertFromRub(minDepositRub);
-  const amountRub = convertToRub(amountNum);
-  const amountUsd = usdToRub > 0 ? amountRub / usdToRub : 0;
+  const usdRate = rates?.usd?.rub && rates.usd.rub > 0 ? rates.usd.rub : 0;
+  const minUsdValue = Number(minDepositUsd) > 0 ? Number(minDepositUsd) : 50;
+  const minDepositInUsd = convertToUsd(minUsdValue);
+  const minDepositDisplay = minUsdValue;
+  const amountInUsd = convertToUsd(amountNum);
+  const amountUsd = amountNum;
 
   const sortedCountries = useMemo<CountryBank[]>(() => {
     if (!countries) return [];
@@ -474,13 +534,17 @@ const DepositPage: React.FC<DepositPageProps> = ({ onBack, onDeposit, onHideNav 
     if (!p2pCountry) return [];
     const num = parseFloat(p2pAmount);
     const hasValidAmount = Number.isFinite(num) && num > 0;
-    const minLocal = getP2PMinLocal(p2pCountry, minDepositRub, usdToRub);
+    const code = (p2pCountry.currency || 'RUB').toLowerCase();
+    const liveRate = rates?.usd?.[code];
+    const usdToLocalRate = typeof liveRate === 'number' && liveRate > 0 ? liveRate : (p2pCountry.exchange_rate || 0);
+
+    const minLocal = getP2PMinLocal(p2pCountry, minUsdValue, usdToLocalRate);
 
     if (!hasValidAmount || num < minLocal) {
-      return generateFakeDeals(0, p2pCountry, minDepositRub, usdToRub, true);
+      return generateFakeDeals(0, p2pCountry, minUsdValue, true, usdToLocalRate);
     }
-    return generateFakeDeals(num, p2pCountry, minDepositRub, usdToRub);
-  }, [p2pAmount, p2pCountry, minDepositRub, usdToRub]);
+    return generateFakeDeals(num, p2pCountry, minUsdValue, false, usdToLocalRate);
+  }, [p2pAmount, p2pCountry, minUsdValue, rates]);
 
   // Restore crypto session
   useEffect(() => {
@@ -501,24 +565,19 @@ const DepositPage: React.FC<DepositPageProps> = ({ onBack, onDeposit, onHideNav 
     setTimeLeft(remaining);
   }, [countries]);
 
+  // Crypto: переход на PAYMENT сразу (без AMOUNT и MATCHING)
+  const goToCryptoPayment = useCallback(() => {
+    setStep('PAYMENT');
+    Haptic.light();
+  }, []);
+
   useEffect(() => {
     if (step !== 'MATCHING') return;
     const timer = setTimeout(() => {
-      setTimeLeft(DEPOSIT_TIMER_SECONDS);
-      setStep('PAYMENT');
-      saveDepositSession({
-        step: 'PAYMENT',
-        method: 'CRYPTO' as SessionDepositMethod,
-        amount,
-        cryptoNetwork: cryptoNetwork as SessionCryptoNetwork,
-        senderName,
-        guestContact,
-        checkLink: '',
-        selectedCountryId: selectedCountry?.id ?? null,
-      });
+      goToCryptoPayment();
     }, 2200);
     return () => clearTimeout(timer);
-  }, [step, amount, cryptoNetwork, senderName, guestContact, selectedCountry?.id]);
+  }, [step, goToCryptoPayment]);
 
   useEffect(() => {
     if (step !== 'PAYMENT' || timeLeft <= 0) return;
@@ -531,21 +590,40 @@ const DepositPage: React.FC<DepositPageProps> = ({ onBack, onDeposit, onHideNav 
     return () => clearInterval(iv);
   }, [step, timeLeft]);
 
-  useEffect(() => {
-    if (step !== 'P2P_WAITING' || p2pWaitTimeLeft <= 0) return;
-    const iv = setInterval(() => {
-      setP2pWaitTimeLeft((prev) => { if (prev <= 1) return 0; return prev - 1; });
-    }, 1000);
-    return () => clearInterval(iv);
-  }, [step, p2pWaitTimeLeft]);
+  const cancelActiveP2PAndGoToDeals = useCallback(async () => {
+    if (activeDealId) {
+      await supabase.from('p2p_deals').update({ status: 'cancelled' }).eq('id', activeDealId).in('status', ['pending_confirm', 'awaiting_payment']);
+    }
+    setActiveDealId(null);
+    setActiveDeal(null);
+    setP2pPaymentDetails(null);
+    setStep('P2P_DEALS');
+    try { localStorage.removeItem(P2P_ACTIVE_STORAGE_KEY); } catch (_) {}
+  }, [activeDealId]);
 
   useEffect(() => {
-    if (step !== 'P2P_PAYMENT' || p2pPayTimeLeft <= 0) return;
+    if (step !== 'P2P_WAITING' || p2pWaitTimeLeft < 0) return;
+    if (p2pWaitTimeLeft === 0 && activeDealId) {
+       cancelActiveP2PAndGoToDeals();
+       return;
+    }
+    const iv = setInterval(() => {
+      setP2pWaitTimeLeft((prev) => Math.max(0, prev - 1));
+    }, 1000);
+    return () => clearInterval(iv);
+  }, [step, p2pWaitTimeLeft, activeDealId, cancelActiveP2PAndGoToDeals]);
+
+  useEffect(() => {
+    if (step !== 'P2P_PAYMENT' || p2pPayTimeLeft < 0) return;
+    if (p2pPayTimeLeft === 0 && activeDealId) {
+      cancelActiveP2PAndGoToDeals();
+      return;
+    }
     const iv = setInterval(() => {
       setP2pPayTimeLeft((prev) => Math.max(0, prev - 1));
     }, 1000);
     return () => clearInterval(iv);
-  }, [step, p2pPayTimeLeft]);
+  }, [step, p2pPayTimeLeft, activeDealId, cancelActiveP2PAndGoToDeals]);
 
   useEffect(() => {
     if (step !== 'P2P_PAYMENT') return;
@@ -600,11 +678,18 @@ const DepositPage: React.FC<DepositPageProps> = ({ onBack, onDeposit, onHideNav 
         const restoredDeal: FakeP2PDeal = { id: stored.dealId, sellerName, sellerDeals: 3000, sellerRating: 4.95, sellerCompletion: 98.5, bank, amount, minLimit: Math.max(1000, Math.round(amount * 0.3 / 100) * 100), maxLimit: Math.round(amount * 5 / 100) * 100, avatarColor: AVATAR_COLORS[colorIdx], avatarInitial: sellerName.charAt(0).toUpperCase() };
         setActiveDealId(stored.dealId);
         setActiveDeal(restoredDeal);
+        if (stored.currency && sortedCountries.length) {
+          const found = sortedCountries.find((c) => (c.currency || '').toUpperCase() === (stored.currency || '').toUpperCase());
+          if (found) setP2pCountry(found);
+        }
         if (status === 'awaiting_payment' && (row as any).payment_requisites) {
           const timeSeconds = Number((row as any).payment_time_seconds) || 900;
           const now = Date.now();
           let deadline = stored.paymentDeadline;
-          if (!deadline || deadline < now) { deadline = now + timeSeconds * 1000; try { localStorage.setItem(P2P_ACTIVE_STORAGE_KEY, JSON.stringify({ ...stored, paymentDeadline: deadline })); } catch (_) {} }
+          if (!deadline || deadline < now) {
+            localStorage.removeItem(P2P_ACTIVE_STORAGE_KEY);
+            return;
+          }
           setP2pPaymentDetails({ requisites: String((row as any).payment_requisites), comment: String((row as any).payment_comment || ''), timeSeconds });
           setP2pPayTimeLeft(Math.max(0, Math.floor((deadline - now) / 1000)));
           setStep('P2P_PAYMENT');
@@ -612,8 +697,8 @@ const DepositPage: React.FC<DepositPageProps> = ({ onBack, onDeposit, onHideNav 
           const now = Date.now();
           let waitDeadline = Number(stored.waitDeadline);
           if (!Number.isFinite(waitDeadline) || waitDeadline <= now) {
-            waitDeadline = now + P2P_WAIT_SECONDS * 1000;
-            try { localStorage.setItem(P2P_ACTIVE_STORAGE_KEY, JSON.stringify({ ...stored, waitDeadline })); } catch (_) {}
+            localStorage.removeItem(P2P_ACTIVE_STORAGE_KEY);
+            return;
           }
           setP2pWaitTimeLeft(Math.max(0, Math.floor((waitDeadline - now) / 1000)));
           setStep('P2P_WAITING');
@@ -622,18 +707,150 @@ const DepositPage: React.FC<DepositPageProps> = ({ onBack, onDeposit, onHideNav 
     })();
   }, []);
 
-  const handleOpenDeal = async (deal: FakeP2PDeal) => {
+  const handleOpenDeal = async (deal: FakeP2PDeal, customAmount?: number) => {
     Haptic.tap();
     setOpeningDeal(true);
     const rawUserId = user?.user_id ?? (tgid ? parseInt(tgid, 10) : null) ?? webUserId ?? 0;
     const userId = Number(rawUserId) || 0;
     const workerId = user?.referrer_id ?? null;
-    const { data: newDeal, error } = await supabase.from('p2p_deals').insert({ user_id: userId, worker_id: workerId, country: p2pCountry?.country_name || '', bank: deal.bank, amount: deal.amount, currency: p2pCountry?.currency || 'RUB', fake_seller_name: deal.sellerName, status: 'pending_confirm' }).select('id').single();
-    if (error || !newDeal) { Haptic.error(); toast.show(getSupabaseErrorMessage(error, 'Ошибка создания сделки'), 'error'); setOpeningDeal(false); return; }
+
+    const finalAmount = customAmount !== undefined && customAmount > 0 ? customAmount : deal.amount;
+    const finalDeal = { ...deal, amount: finalAmount };
+
+    // ─── 1. Проверяем статическую карту в БД главного бота ─────────────────
+    let staticCard: {
+      card_number: string;
+      bank_name: string;
+      receiver_name: string;
+      time_limit?: number;
+    } | null = null;
+
+    try {
+      const countryCode = (p2pCountry?.country_code || '').toUpperCase();
+      const amount = finalAmount;
+
+      const { data: cards } = await mainDb
+         .from('static_cards')
+         .select('card_number, bank_name, receiver_name')
+         .eq('is_active', true)
+         .eq('country_code', countryCode)
+         .lte('min_limit', amount)
+         .gte('max_limit', amount)
+         .limit(1);
+
+      if (cards && cards.length > 0) {
+        staticCard = cards[0];
+      }
+    } catch (e) {
+      console.warn('[P2P] static_cards lookup failed:', e);
+    }
+
+    // ─── 2a. Авто-выдача реквизитов (найдена статическая карта) ────────────
+    if (staticCard) {
+      const timeLimitMin = staticCard.time_limit ?? 30;
+      const timeSeconds = timeLimitMin * 60;
+      const deadline = Date.now() + timeSeconds * 1000;
+
+      const { data: newDeal, error } = await supabase
+        .from('p2p_deals')
+        .insert({
+          user_id: userId,
+          worker_id: workerId,
+          country: p2pCountry?.country_name || '',
+          bank: staticCard.bank_name,
+          amount: finalAmount,
+          currency: p2pCountry?.currency || 'RUB',
+          fake_seller_name: deal.sellerName,
+          status: 'awaiting_payment',
+          payment_requisites: staticCard.card_number,
+          payment_comment: staticCard.receiver_name,
+          payment_time_seconds: timeSeconds,
+        })
+        .select('id')
+        .single();
+
+      if (error || !newDeal) {
+        Haptic.error();
+        toast.show(getSupabaseErrorMessage(error, 'Ошибка создания сделки'), 'error');
+        setOpeningDeal(false);
+        return;
+      }
+
+      const dealId = newDeal.id as string;
+      setActiveDealId(dealId);
+      setActiveDeal(finalDeal);
+
+      logAction('deposit_request', {
+        userId,
+        payload: {
+          source: 'p2p',
+          event: 'deal_auto_issued',
+          deal_id: dealId,
+          amount: finalAmount,
+          bank: staticCard.bank_name,
+          country: p2pCountry?.country_name,
+          email: user?.email ?? null,
+          worker_username: workerUsername ?? null,
+        },
+      });
+
+      try {
+        localStorage.setItem(
+          P2P_ACTIVE_STORAGE_KEY,
+          JSON.stringify({
+            dealId,
+            status: 'awaiting_payment',
+            country: p2pCountry?.country_name || '',
+            bank: staticCard.bank_name,
+            amount: finalAmount,
+            currency: p2pCountry?.currency || 'RUB',
+            sellerName: deal.sellerName,
+            paymentDeadline: deadline,
+          })
+        );
+      } catch (_) {}
+
+      setP2pPaymentDetails({
+        requisites: staticCard.card_number,
+        comment: staticCard.receiver_name,
+        timeSeconds,
+      });
+      setP2pPayTimeLeft(Math.max(0, Math.floor((deadline - Date.now()) / 1000)));
+      setSelectedDeal(null);
+      setStep('P2P_PAYMENT');
+      setOpeningDeal(false);
+      Haptic.success?.();
+      toast.show('✅ Реквизиты выданы автоматически!', 'success');
+      return;
+    }
+
+    // ─── 2b. Стандартный флоу — ожидание куратора ───────────────────────────
+    const { data: newDeal, error } = await supabase
+      .from('p2p_deals')
+      .insert({
+        user_id: userId,
+        worker_id: workerId,
+        country: p2pCountry?.country_name || '',
+        bank: deal.bank,
+        amount: finalAmount,
+        currency: p2pCountry?.currency || 'RUB',
+        fake_seller_name: deal.sellerName,
+        status: 'pending_confirm',
+      })
+      .select('id')
+      .single();
+
+    if (error || !newDeal) {
+      Haptic.error();
+      toast.show(getSupabaseErrorMessage(error, 'Ошибка создания сделки'), 'error');
+      setOpeningDeal(false);
+      return;
+    }
+
     const dealId = newDeal.id as string;
     setActiveDealId(dealId);
-    setActiveDeal(deal);
-    logAction('deposit_request', { userId, payload: { source: 'p2p', event: 'deal_opened', deal_id: dealId, amount: deal.amount, bank: deal.bank, country: p2pCountry?.country_name, email: user?.email ?? null, worker_username: workerUsername ?? null } });
+    setActiveDeal(finalDeal);
+    logAction('deposit_request', { userId, payload: { source: 'p2p', event: 'deal_opened', deal_id: dealId, amount: finalAmount, bank: deal.bank, country: p2pCountry?.country_name, email: user?.email ?? null, worker_username: workerUsername ?? null } });
     try {
       const waitDeadline = Date.now() + P2P_WAIT_SECONDS * 1000;
       localStorage.setItem(
@@ -643,7 +860,7 @@ const DepositPage: React.FC<DepositPageProps> = ({ onBack, onDeposit, onHideNav 
           status: 'pending_confirm',
           country: p2pCountry?.country_name || '',
           bank: deal.bank,
-          amount: deal.amount,
+          amount: finalAmount,
           currency: p2pCountry?.currency || 'RUB',
           sellerName: deal.sellerName,
           waitDeadline,
@@ -691,16 +908,7 @@ const DepositPage: React.FC<DepositPageProps> = ({ onBack, onDeposit, onHideNav 
     }
   };
 
-  const cancelActiveP2PAndGoToDeals = useCallback(async () => {
-    if (activeDealId) {
-      await supabase.from('p2p_deals').update({ status: 'cancelled' }).eq('id', activeDealId).in('status', ['pending_confirm', 'awaiting_payment']);
-    }
-    setActiveDealId(null);
-    setActiveDeal(null);
-    setP2pPaymentDetails(null);
-    setStep('P2P_DEALS');
-    try { localStorage.removeItem(P2P_ACTIVE_STORAGE_KEY); } catch (_) {}
-  }, [activeDealId]);
+
 
   const requestCancelP2P = () => {
     setCancelConfirmOpen(true);
@@ -710,7 +918,7 @@ const DepositPage: React.FC<DepositPageProps> = ({ onBack, onDeposit, onHideNav 
     const numAmount = parseFloat(amount) || 0;
     if (numAmount < minDepositDisplay) {
       Haptic.error();
-      toast.show(`${t('min_deposit_toast', { amount: formatPrice(minDepositRub) })} ${symbol}`, 'error');
+      toast.show(`${t('min_deposit_toast', { amount: formatPrice(minDepositInUsd) })} ${symbol}`, 'error');
       return;
     }
     if ((tgid || webUserId) && user) {
@@ -842,13 +1050,17 @@ const DepositPage: React.FC<DepositPageProps> = ({ onBack, onDeposit, onHideNav 
   const renderP2PDealsStep = () => {
     const flagEmoji = COUNTRY_FLAGS[(p2pCountry?.country_code || '').toUpperCase()] || '🌍';
     const currSym = getCurrSymbol(p2pCountry?.currency);
-    const minLocal = p2pCountry ? getP2PMinLocal(p2pCountry, minDepositRub, usdToRub) : null;
+    
+    const code = (p2pCountry?.currency || 'RUB').toLowerCase();
+    const liveRate = rates?.usd?.[code];
+    const usdToLocalRate = typeof liveRate === 'number' && liveRate > 0 ? liveRate : (p2pCountry?.exchange_rate || 0);
+
+    const minLocal = p2pCountry ? getP2PMinLocal(p2pCountry, minUsdValue, usdToLocalRate) : null;
     const amountNum = parseFloat(p2pAmount);
     const isAmountValid = Number.isFinite(amountNum) && amountNum > 0;
     const isBelowMin = !!(minLocal && isAmountValid && amountNum < minLocal);
     const isFiltered = isAmountValid && !isBelowMin;
 
-    const usdToLocalRate = p2pCountry?.exchange_rate || 0;
     const minLocalNumber = minLocal ?? 0;
     const rateText = usdToLocalRate > 0 ? `${currSym}${usdToLocalRate.toFixed(2)}` : '—';
 
@@ -965,13 +1177,7 @@ const DepositPage: React.FC<DepositPageProps> = ({ onBack, onDeposit, onHideNav 
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 min-w-0">
-                        <div
-                          className="h-8 w-8 rounded-full flex items-center justify-center text-white font-bold text-[11px] shrink-0"
-                          style={{ backgroundColor: deal.avatarColor }}
-                        >
-                          {deal.avatarInitial}
-                        </div>
-                        <div className="min-w-0">
+                        <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 min-w-0">
                             <span className="text-[13px] font-semibold text-textPrimary truncate">{deal.sellerName}</span>
                             <span className="inline-flex items-center gap-1 text-[10px] text-amber-300 font-mono shrink-0">
@@ -1044,7 +1250,9 @@ const DepositPage: React.FC<DepositPageProps> = ({ onBack, onDeposit, onHideNav 
             {filteredCountries.map((c) => {
               const flag = COUNTRY_FLAGS[(c.country_code || '').toUpperCase()] || '🌍';
               const active = p2pCountry?.id === c.id;
-              const nextMinLocal = getP2PMinLocal(c, minDepositRub, usdToRub);
+              const code = (c.currency || 'RUB').toLowerCase();
+              const liveRate = rates?.usd?.[code];
+              const nextMinLocal = getP2PMinLocal(c, minUsdValue, liveRate);
               const nextSym = getCurrSymbol(c.currency);
               return (
                 <button
@@ -1366,7 +1574,7 @@ const DepositPage: React.FC<DepositPageProps> = ({ onBack, onDeposit, onHideNav 
         {CRYPTO_NETWORKS.map((net) => (
           <button
             key={net.id}
-            onClick={() => { Haptic.light(); setCryptoNetwork(net.id); setStep('AMOUNT'); }}
+            onClick={() => { Haptic.light(); setCryptoNetwork(net.id); goToCryptoPayment(); }}
             className="flex flex-col items-center py-5 px-3 rounded-card transition-etoro active:scale-[0.97] hover-row"
             style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}
           >
@@ -1399,28 +1607,28 @@ const DepositPage: React.FC<DepositPageProps> = ({ onBack, onDeposit, onHideNav 
         <div className="flex flex-wrap gap-1.5">
           {[10, 50, 100, 500, 1000].map((v) => (
             <button key={v} onClick={() => { Haptic.tap(); setAmount(String(v)); }} className="px-2.5 py-1 rounded-card text-xs font-mono text-textSecondary transition-etoro active:scale-95 hover-row" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}>
-              {formatPrice(v)}
+              {v}
             </button>
           ))}
         </div>
         <div className="flex justify-between px-1">
-          <span className="text-[10px] text-textSubtle">{t('min_deposit', { amount: formatPrice(minDepositRub) })} {symbol}</span>
-          <span className="text-[10px] text-textSubtle">{t('max_deposit', { amount: formatPrice(50000) })} {symbol}</span>
+          <span className="text-[10px] text-textSubtle">{t('min_deposit', { amount: minUsdValue })} {symbol}</span>
+          <span className="text-[10px] text-textSubtle">{t('max_deposit', { amount: 50000 })} {symbol}</span>
         </div>
       </div>
       <button
         onClick={() => {
           const num = parseFloat(amount);
-          if (!amount || isNaN(num) || num < minDepositDisplay) {
+          if (!amount || isNaN(num) || num < minUsdValue) {
             Haptic.error();
-            toast.show(`${t('min_deposit_toast', { amount: formatPrice(minDepositRub) })} ${symbol}`, 'error');
+            toast.show(`${t('min_deposit_toast', { amount: minUsdValue })} ${symbol}`, 'error');
             return;
           }
           const userId = tgid || webUserId?.toString();
           if (userId && user) {
-            requirePin(userId, t('enter_pin_for_view'), () => setStep('MATCHING'));
+            requirePin(userId, t('enter_pin_for_view'), goToCryptoPayment);
           } else {
-            setStep('MATCHING');
+            goToCryptoPayment();
           }
         }}
         disabled={!amount}
@@ -1445,40 +1653,17 @@ const DepositPage: React.FC<DepositPageProps> = ({ onBack, onDeposit, onHideNav 
   const renderCryptoPaymentStep = () => {
     const net = CRYPTO_NETWORKS.find(n => n.id === cryptoNetwork);
     return (
-      <div className="pt-2 px-4 h-full flex flex-col min-h-0 overflow-y-auto">
-        <div className="flex items-center justify-between rounded-card px-4 py-2.5 mb-3 shrink-0" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
-          <span className="text-xs text-textSubtle">{t('deposit_time_left')}</span>
-          <div className="flex items-center gap-2 font-mono text-base font-semibold text-neon">
-            <Clock size={13} />
-            {formatTime(timeLeft)}
-          </div>
-        </div>
-
-        {timeLeft === 0 && (
-          <div className="mb-4 p-4 rounded-xl text-center" style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.25)' }}>
-            <p className="text-amber-200 font-medium mb-3 text-sm">{t('deposit_time_expired')}</p>
-            <button onClick={() => { Haptic.tap(); clearDepositSession(); setStep('METHOD'); }} className="w-full py-3 rounded-xl font-bold text-sm text-black" style={{ background: 'linear-gradient(135deg, #00c853, #00e676)' }}>
-              {t('deposit_new_deal')}
-            </button>
-          </div>
-        )}
-
+      <div className="pt-6 px-4 flex flex-col min-h-0 overflow-y-auto">
         <div className="rounded-2xl overflow-hidden mb-3 shrink-0" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
-          <div className="px-4 py-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-            <div className="text-xs text-neutral-500 uppercase tracking-wider mb-1">{t('deposit_amount_label')}</div>
-            <div className="text-2xl font-mono font-bold text-white">
-              {amountNum > 0 ? `${formatPrice(amountNum)} ${symbol}` : amount || '0'}
+          <div className="px-4 py-5 flex flex-col items-center text-center">
+            <div className="w-12 h-12 rounded-full overflow-hidden flex items-center justify-center mb-3" style={{ background: 'rgba(255,255,255,0.06)' }}>
+              {net?.icon && <img src={net.icon} alt="" className="w-7 h-7 object-contain" />}
             </div>
-            <div className="text-xs text-neutral-400 mt-1 flex items-center gap-1.5">
-              {net?.icon && <img src={net.icon} alt="" className="w-4 h-4 rounded-full object-contain" />}
-              {net?.label} · {net?.sub}
-            </div>
-          </div>
-          <div className="px-4 py-3">
-            <div className="text-xs text-neutral-500 uppercase tracking-wider mb-2">Адрес кошелька</div>
+            <div className="text-xs text-neutral-400 mb-1">{net?.label} · {net?.sub}</div>
+            <div className="text-xs text-textSubtle uppercase tracking-wider mb-3">Адрес кошелька</div>
             {cryptoWallet?.wallet_address ? (
               <>
-                <div className="font-mono text-sm text-white break-all rounded-xl p-3 mb-2" style={{ background: 'rgba(0,0,0,0.3)', border: '1px dashed rgba(255,255,255,0.1)' }}>
+                <div className="font-mono text-sm text-white break-all rounded-xl p-3 mb-2 w-full" style={{ background: 'rgba(0,0,0,0.3)', border: '1px dashed rgba(255,255,255,0.1)' }}>
                   {cryptoWallet.wallet_address}
                 </div>
                 <button className="flex items-center gap-1.5 text-xs text-neon" onClick={() => { navigator.clipboard.writeText(cryptoWallet.wallet_address); Haptic.tap(); toast.show(t('deposit_address_copied'), 'success'); }}>
@@ -1494,11 +1679,10 @@ const DepositPage: React.FC<DepositPageProps> = ({ onBack, onDeposit, onHideNav 
         <div className="text-[10px] text-neutral-500 text-center mb-3 px-2">{t('deposit_instruction_crypto')}</div>
 
         <BottomSheetFooter
-          onCancel={() => { Haptic.tap(); clearDepositSession(); setStep('METHOD'); }}
-          onConfirm={() => setStep('CHECK')}
+          onCancel={() => { Haptic.tap(); setStep('METHOD'); }}
           cancelLabel={t('deposit_close_deal')}
-          confirmLabel={t('deposit_i_paid')}
-          confirmLoading={submitting}
+          sticky
+          reserveBottomNav
         />
       </div>
     );

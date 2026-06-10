@@ -11,7 +11,7 @@ import { useToast } from '../context/ToastContext';
 import ExchangeAssetPicker, { type ExchangeSide } from '../components/ExchangeAssetPicker';
 import type { SpotHolding } from '../types';
 
-const MIN_EXCHANGE_RUB = 100;
+const MIN_EXCHANGE_USD = 1;
 
 interface ExchangePageProps {
   spotHoldings: SpotHolding[];
@@ -31,7 +31,7 @@ const ExchangePage: React.FC<ExchangePageProps> = ({
   onGoTrading,
 }) => {
   const { t } = useLanguage();
-  const { formatPrice, symbol, convertToRub, convertFromRub, currencyCode } = useCurrency();
+  const { formatPrice, symbol, convertToUsd, convertFromUsd, currencyCode } = useCurrency();
   const { user, refreshUser } = useUser();
   const toast = useToast();
   const liveAssets = useLiveAssets(MARKET_ASSETS);
@@ -51,7 +51,7 @@ const ExchangePage: React.FC<ExchangePageProps> = ({
     onPickerOpenChange?.(false);
   };
 
-  const balanceRub = user?.balance ?? 0;
+  const balanceUsd = user?.balance ?? 0;
   const assetFrom =
     fromSide === 'currency'
       ? null
@@ -60,8 +60,8 @@ const ExchangePage: React.FC<ExchangePageProps> = ({
     toSide === 'currency'
       ? null
       : liveAssets.find((a) => a.ticker === toSide) ?? MARKET_ASSETS.find((a) => a.ticker === toSide);
-  const priceFromRub = fromSide === 'currency' ? 0 : (assetFrom?.price ?? 0);
-  const priceToRub = toSide === 'currency' ? 0 : (assetTo?.price ?? 0);
+  const priceFromUsd = fromSide === 'currency' ? 0 : (assetFrom?.price ?? 0);
+  const priceToUsd = toSide === 'currency' ? 0 : (assetTo?.price ?? 0);
   const holdingFrom = fromSide === 'currency' ? null : spotHoldings.find((h) => h.ticker === fromSide);
   const fromAmount = fromSide === 'currency' ? 0 : (holdingFrom?.amount ?? 0);
 
@@ -71,36 +71,36 @@ const ExchangePage: React.FC<ExchangePageProps> = ({
   const isFromCurrency = fromSide === 'currency';
   const isToCurrency = toSide === 'currency';
 
-  const amountInRub = isFromCurrency ? convertToRub(numAmount) : numAmount * priceFromRub;
+  const amountInUsd = isFromCurrency ? convertToUsd(numAmount) : numAmount * priceFromUsd;
   const resultQuantity =
-    isToCurrency ? (priceToRub > 0 ? amountInRub / priceToRub : 0) : priceToRub > 0 ? amountInRub / priceToRub : 0;
-  const resultInCurrency = amountInRub;
+    isToCurrency ? (priceToUsd > 0 ? amountInUsd / priceToUsd : 0) : priceToUsd > 0 ? amountInUsd / priceToUsd : 0;
+  const resultInCurrency = amountInUsd;
   const resultInCrypto = resultQuantity;
 
   const canSubmit =
     fromSide !== toSide &&
     numAmount > 0 &&
-    Number.isFinite(amountInRub) &&
-    amountInRub >= MIN_EXCHANGE_RUB &&
+    Number.isFinite(amountInUsd) &&
+    amountInUsd >= convertToUsd(MIN_EXCHANGE_USD) &&
     (isFromCurrency
-      ? balanceRub >= convertToRub(numAmount) && (isToCurrency || priceToRub > 0)
-      : fromAmount >= numAmount && priceFromRub > 0 && (isToCurrency || priceToRub > 0));
+      ? balanceUsd >= convertToUsd(numAmount) && (isToCurrency || priceToUsd > 0)
+      : fromAmount >= numAmount && priceFromUsd > 0 && (isToCurrency || priceToUsd > 0));
 
   const canSubmitForUi =
     user
       ? canSubmit
       : fromSide !== toSide &&
         numAmount > 0 &&
-        Number.isFinite(amountInRub) &&
-        amountInRub >= MIN_EXCHANGE_RUB;
+        Number.isFinite(amountInUsd) &&
+        amountInUsd >= convertToUsd(MIN_EXCHANGE_USD);
 
   const amountPresetsRub = useMemo(
     () =>
-      [...new Set([MIN_EXCHANGE_RUB, 1000, 5000, Math.floor(balanceRub * 0.5), balanceRub])]
-        .filter((v) => v >= MIN_EXCHANGE_RUB && v > 0)
+      [...new Set([convertToUsd(MIN_EXCHANGE_USD), 1000, 5000, Math.floor(balanceUsd * 0.5), balanceUsd])]
+        .filter((v) => v >= convertToUsd(MIN_EXCHANGE_USD) && v > 0)
         .sort((a, b) => a - b)
         .slice(0, 4),
-    [balanceRub]
+    [balanceUsd]
   );
 
   const sanitizeDecimalInput = (raw: string) => {
@@ -124,13 +124,13 @@ const ExchangePage: React.FC<ExchangePageProps> = ({
     setLoading(true);
     try {
       if (isFromCurrency && !isToCurrency) {
-        const amountRub = convertToRub(numAmount);
-        if (amountRub <= 0 || amountRub > balanceRub) {
+        const amountUsd = convertToUsd(numAmount);
+        if (amountUsd <= 0 || amountUsd > balanceUsd) {
           toast.show(t('exchange_insufficient_balance'), 'error');
           setLoading(false);
           return;
         }
-        const res = await spotBuy(user.user_id, toSide as string, amountRub, priceToRub);
+        const res = await spotBuy(user.user_id, toSide as string, amountUsd, priceToUsd);
         if (res.ok) {
           toast.show(t('exchange_success'), 'success');
           setAmount('');
@@ -146,7 +146,7 @@ const ExchangePage: React.FC<ExchangePageProps> = ({
           setLoading(false);
           return;
         }
-        const res = await spotSell(user.user_id, fromSide as string, numAmount, priceFromRub);
+        const res = await spotSell(user.user_id, fromSide as string, numAmount, priceFromUsd);
         if (res.ok) {
           toast.show(t('exchange_success'), 'success');
           setAmount('');
@@ -162,14 +162,14 @@ const ExchangePage: React.FC<ExchangePageProps> = ({
           setLoading(false);
           return;
         }
-        const sellRes = await spotSell(user.user_id, fromSide as string, numAmount, priceFromRub);
-        if (!sellRes.ok || sellRes.amount_rub == null) {
+        const sellRes = await spotSell(user.user_id, fromSide as string, numAmount, priceFromUsd);
+        if (!sellRes.ok || sellRes.amount_usd == null) {
           toast.show(sellRes.error ?? t('exchange_insufficient_balance'), 'error');
           Haptic.error();
           setLoading(false);
           return;
         }
-        const buyRes = await spotBuy(user.user_id, toSide as string, sellRes.amount_rub, priceToRub);
+        const buyRes = await spotBuy(user.user_id, toSide as string, sellRes.amount_usd, priceToUsd);
         if (buyRes.ok) {
           toast.show(t('exchange_success'), 'success');
           setAmount('');
@@ -188,7 +188,7 @@ const ExchangePage: React.FC<ExchangePageProps> = ({
   const fromLabel = isFromCurrency ? symbol : fromSide;
   const toLabel = isToCurrency ? symbol : toSide;
   const fromSub = isFromCurrency
-    ? `${formatPrice(balanceRub)} ${symbol}`
+    ? `${formatPrice(balanceUsd)} ${symbol}`
     : holdingFrom
       ? `${fromAmount.toFixed(6)} ${fromSide}`
       : null;
@@ -224,8 +224,8 @@ const ExchangePage: React.FC<ExchangePageProps> = ({
             {t('exchange_mode_futures')}
           </button>
           <div className="flex-1" />
-          <div className="h-9 w-9 rounded-2xl bg-black/30 border border-white/5 flex items-center justify-center text-textSecondary">
-            <ConvertIcon size={18} />
+          <div className="h-9 w-9 rounded-xl bg-white/[0.03] flex items-center justify-center text-textSecondary">
+            <ConvertIcon size={18} strokeWidth={1.75} />
           </div>
         </div>
 
@@ -241,11 +241,11 @@ const ExchangePage: React.FC<ExchangePageProps> = ({
             <button
               type="button"
               onClick={() => { Haptic.tap(); onGoTrading?.('spot'); onBack(); }}
-              className="h-9 w-9 rounded-2xl flex items-center justify-center active:scale-[0.98] transition-transform bg-black/30 text-textSecondary border border-white/5"
+              className="touch-target h-9 w-9 rounded-xl flex items-center justify-center text-textSecondary hover:text-textPrimary hover:bg-white/5 active:scale-95 transition-all focus:outline-none"
               aria-label={t('chart_title')}
               title={t('chart_title')}
             >
-              <BarChart3 size={18} />
+              <BarChart3 size={18} strokeWidth={1.75} />
             </button>
           </div>
         </div>
@@ -265,7 +265,7 @@ const ExchangePage: React.FC<ExchangePageProps> = ({
                   Haptic.tap();
                   openPicker('from');
                 }}
-                className="touch-target w-full flex items-center justify-between gap-2 py-2.5 px-3 rounded-2xl bg-black/30 border border-white/5 transition-colors text-left"
+                className="touch-target w-full flex items-center justify-between gap-2 py-2.5 px-3 rounded-xl bg-white/[0.02] hover:bg-white/[0.04] transition-all text-left"
               >
                 <div className="min-w-0 flex-1">
                   <p className="font-mono font-semibold text-sm text-textPrimary truncate">{fromLabel}</p>
@@ -281,16 +281,16 @@ const ExchangePage: React.FC<ExchangePageProps> = ({
                 placeholder={isFromCurrency ? `0 ${symbol}` : '0'}
                 value={amount}
                 onChange={(e) => setAmount(sanitizeDecimalInput(e.target.value))}
-                className="w-full bg-black/30 border border-white/5 rounded-2xl px-3 py-2.5 text-textPrimary font-mono text-sm placeholder:text-textMuted focus:outline-none focus:border-white/10 transition-colors"
+                className="w-full bg-white/[0.02] hover:bg-white/[0.03] focus:bg-white/[0.04] rounded-xl px-3 py-2.5 text-textPrimary font-mono text-sm placeholder:text-textMuted focus:outline-none transition-all"
               />
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-[10px] font-mono text-textMuted">
-                  {t('exchange_min_amount', { amount: `${formatPrice(MIN_EXCHANGE_RUB)} ${symbol}` })}
+                  {t('exchange_min_amount', { amount: `${MIN_EXCHANGE_USD} ${symbol}` })}
                 </p>
                 {isFromCurrency && amountPresetsRub.length > 0 && (
                   <div className="flex flex-wrap items-center gap-2">
                     {amountPresetsRub.map((presetRub) => {
-                      const presetDisplay = convertFromRub(presetRub);
+                      const presetDisplay = convertFromUsd(presetRub);
                       return (
                         <button
                           key={presetRub}
@@ -335,7 +335,7 @@ const ExchangePage: React.FC<ExchangePageProps> = ({
                   Haptic.tap();
                   openPicker('to');
                 }}
-                className="touch-target w-full flex items-center justify-between gap-2 py-2.5 px-3 rounded-2xl bg-black/30 border border-white/5 transition-colors text-left"
+                className="touch-target w-full flex items-center justify-between gap-2 py-2.5 px-3 rounded-xl bg-white/[0.02] hover:bg-white/[0.04] transition-all text-left"
               >
                 <div className="min-w-0 flex-1">
                   <p className="font-mono font-semibold text-sm text-textPrimary truncate">{toLabel}</p>
@@ -390,7 +390,7 @@ const ExchangePage: React.FC<ExchangePageProps> = ({
         selected={pickerMode === 'from' ? fromSide : toSide}
         exclude={pickerMode === 'from' ? toSide : fromSide}
         spotHoldings={spotHoldings}
-        balanceRub={balanceRub}
+        balanceUsd={balanceUsd}
         onSelect={pickerMode === 'from' ? setFromSide : setToSide}
         onClose={closePicker}
       />

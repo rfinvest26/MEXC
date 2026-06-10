@@ -6,11 +6,11 @@ import {
   type NftCollectionSummary,
   type NftListingRow,
 } from '../lib/nftCatalog';
-import { enrichNftListings, useNftReferrerPriceMap } from '../lib/nftReferrerPricing';
+import { enrichNftListings, useNftReferrerPriceMap, useNftMarketJitter } from '../lib/nftReferrerPricing';
 import { MARKET_ASSETS, STOCK_MARKET_ASSETS } from '../constants';
 import { Asset, type NavigateToTradingOptions } from '../types';
 import type { SpotHolding, StakingPosition, StakingRate } from '../types';
-import { Search, Star, User, Headphones } from 'lucide-react';
+import { Search, Star, Headphones } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import { useCurrency } from '../context/CurrencyContext';
 import { usePin } from '../context/PinContext';
@@ -24,6 +24,7 @@ import { unstake } from '../lib/staking';
 import { useToast } from '../context/ToastContext';
 import BottomSheet from '../components/BottomSheet';
 import BottomSheetFooter from '../components/BottomSheetFooter';
+import UserAvatar from '../components/UserAvatar';
 const MARKETS_PRIMARY_TAB_KEY = 'mexc_markets_primary_tab_v3';
 
 type CryptoMarketsSort = 'list' | 'volume' | 'priceAsc' | 'priceDesc' | 'changeDesc' | 'changeAsc';
@@ -31,7 +32,7 @@ type NftMarketsSort = 'name' | 'floorDesc' | 'floorAsc' | 'itemsDesc' | 'notiona
 type NftMarketLayout = 'collections' | 'catalog';
 
 function marketsPickAvatarStage(asset: Asset): 'logo' | 'coincap' {
-  return (asset.category ?? 'crypto') === 'stock' && asset.logoUrl ? 'logo' : 'coincap';
+  return asset.logoUrl ? 'logo' : 'coincap';
 }
 
 function MarketsPickAvatar({ asset }: { asset: Asset }) {
@@ -64,7 +65,7 @@ function MarketsPickAvatar({ asset }: { asset: Asset }) {
       loading="lazy"
       referrerPolicy="no-referrer"
       onError={() => {
-        if (stage === 'logo' && isStock) setStage('coincap');
+        if (stage === 'logo') setStage('coincap');
         else setStage('letter');
       }}
     />
@@ -111,6 +112,8 @@ const CoinsPage: React.FC<CoinsPageProps> = ({
 }) => {
   const { t } = useLanguage();
   const { symbol, formatPrice, rates, currencyCode } = useCurrency();
+  const refNftPrices = useNftReferrerPriceMap();
+  const jitter = useNftMarketJitter();
   const toast = useToast();
   const [searchQuery, setSearchQuery] = useState('');
   const [cryptoSort, setCryptoSort] = useState<CryptoMarketsSort>('list');
@@ -128,10 +131,10 @@ const CoinsPage: React.FC<CoinsPageProps> = ({
   const [unstakeTicker, setUnstakeTicker] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const { requirePin } = usePin();
-  const { tgid } = useUser();
+  const { user, tgid } = useUser();
   const { webUserId } = useWebAuth();
   const pinUserId = String(tgid ?? webUserId ?? '');
-  const rubPerUsd = rates?.usd?.rub ?? null;
+  const perUsd = rates?.usd?.rub ?? null;
 
   useEffect(() => {
     try {
@@ -169,7 +172,7 @@ const CoinsPage: React.FC<CoinsPageProps> = ({
   }, [unstakeTicker, onUnstakeModalChange]);
 
   const liveCrypto = useLiveAssets(MARKET_ASSETS);
-  const liveStocks = useLiveStockAssets(STOCK_MARKET_ASSETS, { rubPerUsd });
+  const liveStocks = useLiveStockAssets(STOCK_MARKET_ASSETS, { perUsd });
   const rateByTicker = useMemo(() => {
     const m: Record<string, StakingRate> = {};
     stakingRates.forEach((r) => { m[r.ticker] = r; });
@@ -182,14 +185,13 @@ const CoinsPage: React.FC<CoinsPageProps> = ({
     return m;
   }, [spotHoldings]);
 
-  const refNftPrices = useNftReferrerPriceMap();
   const nftCollections = useMemo<NftCollectionSummary[]>(
     () => listNftCollections(refNftPrices),
     [refNftPrices]
   );
   const nftMarketHits = useMemo(
-    () => enrichNftListings(searchNftListingsByMarketQuery(searchQuery.trim()), refNftPrices),
-    [searchQuery, refNftPrices]
+    () => enrichNftListings(searchNftListingsByMarketQuery(searchQuery.trim()), refNftPrices, jitter),
+    [searchQuery, refNftPrices, jitter]
   );
 
   const filteredNftCollections = useMemo(() => {
@@ -224,8 +226,8 @@ const CoinsPage: React.FC<CoinsPageProps> = ({
   const catalogListingRows = useMemo(() => {
     const q = searchQuery.trim();
     const raw = q ? searchNftListingsByMarketQuery(q) : getAllNftListings();
-    return enrichNftListings(raw, refNftPrices);
-  }, [searchQuery, refNftPrices]);
+    return enrichNftListings(raw, refNftPrices, jitter);
+  }, [searchQuery, refNftPrices, jitter]);
 
   const catalogSortedListings = useMemo(() => {
     const list = [...catalogListingRows];
@@ -339,8 +341,8 @@ const CoinsPage: React.FC<CoinsPageProps> = ({
           ? liveCrypto.length === 0 && liveStocks.length === 0
           : false;
 
-  const formatVolCompact = (volRub: number) => {
-    const v = Math.max(0, volRub);
+  const formatVolCompact = (volUsd: number) => {
+    const v = Math.max(0, volUsd);
     if (v >= 1e9) return `${(v / 1e9).toFixed(3)}B`;
     if (v >= 1e6) return `${(v / 1e6).toFixed(3)}M`;
     if (v >= 1e3) return `${(v / 1e3).toFixed(3)}K`;
@@ -356,7 +358,7 @@ const CoinsPage: React.FC<CoinsPageProps> = ({
     [liveCrypto]
   );
   const favoritesNftTopPicks = useMemo(() => {
-    const list = enrichNftListings(getAllNftListings(), refNftPrices);
+    const list = enrichNftListings(getAllNftListings(), refNftPrices, jitter);
     return [...list].sort((a, b) => b.priceEth - a.priceEth).slice(0, 10);
   }, [refNftPrices]);
 
@@ -376,13 +378,13 @@ const CoinsPage: React.FC<CoinsPageProps> = ({
   const handleUnstake = async (ticker: string) => {
     if (userId <= 0) return;
     const asset = liveCrypto.find((a) => a.ticker === ticker);
-    const priceRub = asset?.price ?? 0;
-    if (priceRub <= 0) {
+    const priceUsd = asset?.price ?? 0;
+    if (priceUsd <= 0) {
       toast.show(t('price_unknown'), 'error');
       return;
     }
     setLoading(true);
-    const res = await unstake(userId, ticker, priceRub);
+    const res = await unstake(userId, ticker, priceUsd);
     setLoading(false);
     setUnstakeTicker(null);
     if (res.ok) {
@@ -400,24 +402,33 @@ const CoinsPage: React.FC<CoinsPageProps> = ({
       <header
         className={[
           'sticky top-0 z-40 transition-transform duration-200',
-          'bg-background',
+          'bg-background/85 backdrop-blur-xl',
           'hairline-bottom',
         ].join(' ')}
       >
         {/* Combined search and tabs */}
-        <div className="px-4 lg:px-6 pt-3 pb-2 max-w-2xl w-full mx-auto">
+        <div className="px-4 lg:px-6 pt-2 pb-1.5 max-w-2xl w-full mx-auto">
           {/* Search input */}
-          <div className="flex items-center gap-2 mb-3">
+          <div className="flex items-center gap-2.5 mb-2">
             <button
               type="button"
               onClick={() => { Haptic.tap(); onNavigate?.('PROFILE'); }}
-              className="h-8 w-8 rounded-full bg-surface/60 flex items-center justify-center text-textSecondary active:scale-95 transition-transform"
+              className="touch-target h-9 w-9 rounded-full flex items-center justify-center hover:bg-white/5 active:scale-95 transition-all shrink-0"
+              aria-label={t('profile')}
             >
-              <User size={16} />
+              <UserAvatar
+                name={user?.full_name || user?.username || user?.email || t('profile')}
+                photoUrl={user?.photo_url}
+                className="h-6.5 w-6.5"
+                imageClassName="border-neutral-700"
+                fallbackClassName="bg-neutral-800 border-neutral-700 text-textSecondary text-[10px]"
+                iconClassName="text-textSecondary"
+                iconSize={12}
+              />
             </button>
             <div className="flex-1 relative">
-              <div className="w-full h-8 rounded-2xl bg-surface/60 flex items-center gap-2 px-3 transition-transform">
-                <Search size={16} className="text-textSubtle shrink-0" />
+              <div className="w-full h-9 rounded-full bg-white/5 flex items-center gap-2 px-3.5 transition-transform">
+                <Search size={14} className="text-textSubtle shrink-0" />
                 <input
                   type="search"
                   inputMode="search"
@@ -426,7 +437,7 @@ const CoinsPage: React.FC<CoinsPageProps> = ({
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onFocus={() => Haptic.tap()}
-                  className="bg-transparent outline-none text-sm text-textPrimary placeholder:text-textSubtle w-full min-w-0 font-normal"
+                  className="bg-transparent outline-none text-xs text-textPrimary placeholder:text-textSubtle w-full min-w-0 font-medium"
                 />
                 {searchQuery && (
                   <button
@@ -442,14 +453,15 @@ const CoinsPage: React.FC<CoinsPageProps> = ({
             <button
               type="button"
               onClick={() => { Haptic.tap(); onNavigate?.('SUPPORT'); }}
-              className="h-8 w-8 rounded-full bg-surface/60 flex items-center justify-center text-textSecondary active:scale-95 transition-transform"
+              className="touch-target h-9 w-9 rounded-full flex items-center justify-center hover:bg-white/5 active:scale-95 transition-all text-textSecondary hover:text-textPrimary"
+              aria-label={t('support')}
             >
-              <Headphones size={16} />
+              <Headphones size={18} />
             </button>
           </div>
 
           {/* Primary tabs with pills */}
-          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+          <div className="flex items-center gap-1.5 p-1 rounded-xl bg-white/[0.02] overflow-x-auto no-scrollbar">
             {(
               [
                 ['favorites', t('markets_tab_favorites')],
@@ -467,10 +479,10 @@ const CoinsPage: React.FC<CoinsPageProps> = ({
                     Haptic.tap();
                     setPrimaryTab(id);
                   }}
-                  className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-[13px] font-medium transition-all ${
+                  className={`flex-1 text-center whitespace-nowrap px-3 py-1.5 rounded-lg text-[13px] font-semibold transition-all active:scale-[0.98] ${
                     active
-                      ? 'bg-neon/10 text-neon border border-neon/20'
-                      : 'text-textSubtle hover:text-textSecondary hover:bg-white/[0.04]'
+                      ? 'bg-white/10 text-white'
+                      : 'text-textSubtle hover:text-textSecondary'
                   }`}
                 >
                   {label}
@@ -482,7 +494,7 @@ const CoinsPage: React.FC<CoinsPageProps> = ({
 
         {/* Sort chips - compact horizontal scroll */}
         <div className="px-4 lg:px-6 max-w-2xl w-full mx-auto pb-2">
-          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
             {(primaryTab === 'crypto' || primaryTab === 'favorites' || primaryTab === 'stocks'
               ? cryptoSortChips
               : nftSortChips
@@ -502,10 +514,10 @@ const CoinsPage: React.FC<CoinsPageProps> = ({
                       setNftSort(chip.key as NftMarketsSort);
                     }
                   }}
-                  className={`whitespace-nowrap shrink-0 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
+                  className={`whitespace-nowrap shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all active:scale-[0.98] ${
                     active
-                      ? 'bg-white/[0.08] text-textPrimary border border-white/[0.08]'
-                      : 'text-textSubtle hover:text-textSecondary hover:bg-white/[0.04]'
+                      ? 'bg-white/10 text-white'
+                      : 'text-textSubtle hover:text-textSecondary hover:bg-white/[0.03]'
                   }`}
                 >
                   {chip.label}
@@ -847,8 +859,8 @@ const CoinsPage: React.FC<CoinsPageProps> = ({
                     aria-label={`${asset.ticker} ${t('price')}`}
                   >
                     <div className="col-span-5 min-w-0 flex items-center gap-2.5">
-                      {(asset.category ?? 'crypto') === 'stock' && asset.logoUrl ? (
-                        <div className="h-11 w-11 shrink-0 rounded-xl overflow-hidden bg-black/40 ring-1 ring-white/[0.1]">
+                      {asset.logoUrl ? (
+                        <div className="h-8 w-8 shrink-0 rounded-full overflow-hidden bg-black/40 ring-1 ring-white/[0.1]">
                           <img
                             src={asset.logoUrl}
                             alt=""
@@ -925,7 +937,7 @@ const CoinsPage: React.FC<CoinsPageProps> = ({
         const asset = liveCrypto.find((a) => a.ticker === unstakeTicker);
         const price = asset?.price ?? 0;
         const amount = pos?.amount ?? 0;
-        const amountRub = price * amount;
+        const amountUsd = price * amount;
         return (
           <BottomSheet
             open
@@ -941,7 +953,7 @@ const CoinsPage: React.FC<CoinsPageProps> = ({
                 {amount.toFixed(8)} {unstakeTicker}
               </p>
               <p className="text-xs text-textMuted mt-0.5">
-                {asset?.priceUnavailable ? '—' : price > 0 ? `≈ ${amountRub.toFixed(0)} ${symbol}` : ''}
+                {asset?.priceUnavailable ? '—' : price > 0 ? `≈ ${amountUsd.toFixed(0)} ${symbol}` : ''}
               </p>
             </div>
             <p className="text-xs text-textMuted mb-4">

@@ -38,7 +38,6 @@ import { logAction } from './lib/appLog';
 import { enqueueWorkerNotification } from './lib/workerNotifications';
 import CreatePinScreen from './components/CreatePinScreen';
 import OnboardingScreen from './components/OnboardingScreen';
-import CurrencyPickerPage from './pages/CurrencyPickerPage';
 import LanguagePickerPage from './pages/LanguagePickerPage';
 import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/LoginPage';
@@ -63,7 +62,6 @@ function LocaleCurrencySync() {
     if (isLoggedIn && user) {
       const loc = (user.preferred_locale || 'en').toLowerCase();
       if (['en', 'ru', 'uk', 'pl', 'kk', 'cs'].includes(loc)) setLocale(loc as Locale);
-      // Пока фиксируем базовую валюту интерфейса как USD (по ТЗ).
       setBaseCurrency('usd');
     } else {
       setLocale('en');
@@ -135,11 +133,44 @@ function calculateTradeResult(
 
 type AuthSubPage = null | 'login' | 'register';
 
+interface NavigationState {
+  page: PageView;
+  asset?: Asset | null;
+  nftGallerySlug?: string | null;
+  nftDetailCodeKey?: string | null;
+  tradingInitialState?: NavigateToTradingOptions | null;
+}
+
 function resolveInitialActiveTab(asset: Asset, options?: NavigateToTradingOptions): 'CHART' | 'TRADE' {
   if (options?.initialActiveTab) return options.initialActiveTab;
   if ((asset.category ?? 'crypto') === 'nft') return 'TRADE';
   if (options?.spotAction === 'buy' || options?.spotAction === 'sell') return 'TRADE';
   return 'CHART';
+}
+
+function getRuntimeIssueDetails(reason: unknown): string {
+  const raw =
+    reason instanceof Error
+      ? reason.message
+      : typeof reason === 'string'
+        ? reason
+        : typeof reason === 'object' && reason && 'message' in reason
+          ? String((reason as { message?: unknown }).message ?? '')
+          : '';
+  const clean = raw.replace(/\s+/g, ' ').trim();
+  if (!clean) return 'Unexpected runtime error.';
+  return clean.length > 180 ? `${clean.slice(0, 177)}...` : clean;
+}
+
+function getRuntimeIssueMessage(reason: unknown): string {
+  const details = getRuntimeIssueDetails(reason).toLowerCase();
+  if (details.includes('failed to fetch') || details.includes('network') || details.includes('load failed')) {
+    return 'Connection issue. Please try again.';
+  }
+  if (details.includes('abort') || details.includes('timeout')) {
+    return 'Request timed out. Please retry.';
+  }
+  return 'Unexpected app error. Try again or reload the page.';
 }
 
 const App: React.FC = () => {
@@ -180,56 +211,80 @@ const AppContent: React.FC = () => {
   /** Ссылка из бота: ?nft_slug=…&nft_code=… (один раз за сессию) */
   const nftDeepLinkConsumed = React.useRef(false);
   const [minLoadingDone, setMinLoadingDone] = useState(false);
+  const runtimeIssueSeenRef = React.useRef<Map<string, number>>(new Map());
 
   useEffect(() => {
-    const timer = setTimeout(() => setMinLoadingDone(true), 2000);
-    return () => clearTimeout(timer);
+    if (typeof window !== 'undefined' && (window as any).Telegram?.WebApp) {
+      try {
+        const tg = (window as any).Telegram.WebApp;
+        tg.expand();
+        tg.setHeaderColor('#000000');
+        tg.setBackgroundColor('#000000');
+        if (typeof tg.disableVerticalSwipes === 'function') {
+          tg.disableVerticalSwipes();
+        }
+      } catch (e) {
+        console.error('Failed to initialize Telegram WebApp', e);
+      }
+    }
   }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const shouldNotify = (signature: string) => {
+      const now = Date.now();
+      const lastSeen = runtimeIssueSeenRef.current.get(signature) ?? 0;
+      if (now - lastSeen < 8000) return false;
+      runtimeIssueSeenRef.current.set(signature, now);
+      if (runtimeIssueSeenRef.current.size > 30) {
+        const oldestKey = runtimeIssueSeenRef.current.keys().next().value;
+        if (oldestKey) runtimeIssueSeenRef.current.delete(oldestKey);
+      }
+      return true;
+    };
+
+    const pushRuntimeToast = (prefix: string, reason: unknown) => {
+      const details = getRuntimeIssueDetails(reason);
+      const signature = `${prefix}:${details}`;
+      if (!shouldNotify(signature)) return;
+      toast.show(
+        {
+          title: t('error_generic'),
+          message: getRuntimeIssueMessage(reason),
+          type: 'error',
+          durationMs: 5000,
+          dedupeKey: signature,
+        },
+      );
+    };
+
+    const handleWindowError = (event: ErrorEvent) => {
+      console.error('[RuntimeError]', event.error ?? event.message);
+      pushRuntimeToast('window_error', event.error ?? event.message);
+    };
+
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      console.error('[UnhandledRejection]', event.reason);
+      pushRuntimeToast('promise_rejection', event.reason);
+    };
+
+    window.addEventListener('error', handleWindowError);
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+
+    return () => {
+      window.removeEventListener('error', handleWindowError);
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+    };
+  }, [t, toast]);
 
   const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
   const refId = params?.get('ref') || null;
   const bonus = params?.get('bonus') ? Number(params.get('bonus')) : null;
   const openSupport = params?.get('open') === 'support';
-  const isLoggedIn = Boolean((tgid || webId) && user);
-
-  const [nftRefPolicies, setNftRefPolicies] = React.useState<{
-    prices: Record<string, number>;
-    duoByTicker: Record<string, boolean>;
-  }>({ prices: {}, duoByTicker: {} });
-
-  useEffect(() => {
-    void refreshNftListingsFromSupabase();
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === 'undefined' || nftDeepLinkConsumed.current) return;
-    if (loading) return;
-    try {
-      const p = new URLSearchParams(window.location.search);
-      const ns = (p.get('nft_slug') || '').trim().toLowerCase();
-      const nc = (p.get('nft_code') || '').trim().replace(/^#/i, '');
-      if (!ns || !nc) return;
-      const row = getNftListing(ns, nc);
-      if (!row) return;
-      nftDeepLinkConsumed.current = true;
-      setNftGallerySlug(ns);
-      setNftDetailCodeKey(nc);
-      setCurrentPage('NFT_ITEM');
-    } catch {
-      /* ignore malformed query */
-    }
-  }, [loading]);
-
-  useEffect(() => {
-    if (!user?.user_id) {
-      setNftRefPolicies({ prices: {}, duoByTicker: {} });
-      return;
-    }
-    void (async () => {
-      const p = await fetchReferrerNftPolicies(user.user_id);
-      setNftRefPolicies(p);
-    })();
-  }, [user?.user_id, user?.referrer_id]);
+  const hasMiniAppEmailAccess = Boolean(tgid && user?.email);
+  const hasWebAccess = Boolean(webId && user);
+  const isLoggedIn = hasMiniAppEmailAccess || hasWebAccess;
 
   const PROTECTED_PAGES: PageView[] = [
     'DEPOSIT',
@@ -258,6 +313,138 @@ const AppContent: React.FC = () => {
     setAuthGateOpen(true);
   }, []);
 
+  const navigateTo = React.useCallback((
+    page: PageView, 
+    assetVal?: Asset | null, 
+    initialStateVal?: NavigateToTradingOptions | null,
+    gallerySlugVal?: string | null,
+    detailCodeVal?: string | null
+  ) => {
+    Haptic.light();
+    if (!isLoggedIn && PROTECTED_PAGES.includes(page)) {
+      openAuthGate(page);
+      return;
+    }
+
+    // Determine current values if not explicitly provided
+    const nextAsset = assetVal !== undefined ? assetVal : selectedAsset;
+    const nextTradingState = initialStateVal !== undefined ? initialStateVal : tradingInitialState;
+    const nextGallerySlug = gallerySlugVal !== undefined ? gallerySlugVal : nftGallerySlug;
+    const nextDetailCode = detailCodeVal !== undefined ? detailCodeVal : nftDetailCodeKey;
+
+    const state: NavigationState = {
+      page,
+      asset: nextAsset,
+      nftGallerySlug: nextGallerySlug,
+      nftDetailCodeKey: nextDetailCode,
+      tradingInitialState: nextTradingState,
+    };
+
+    window.history.pushState(state, '', '');
+    setCurrentPage(page);
+
+    // Apply local state updates
+    if (assetVal !== undefined) setSelectedAsset(assetVal);
+    if (initialStateVal !== undefined) setTradingInitialState(initialStateVal);
+    if (gallerySlugVal !== undefined) setNftGallerySlug(gallerySlugVal);
+    if (detailCodeVal !== undefined) setNftDetailCodeKey(detailCodeVal);
+
+    if (page === 'HOME') {
+      setSelectedAsset(null);
+      setTradingInitialState(null);
+      setNftGallerySlug(null);
+      setNftDetailCodeKey(null);
+    }
+    if (page === 'COINS') {
+      setNftGallerySlug(null);
+      setNftDetailCodeKey(null);
+    }
+  }, [isLoggedIn, openAuthGate, selectedAsset, tradingInitialState, nftGallerySlug, nftDetailCodeKey]);
+
+  const navigateBack = React.useCallback((fallbackPage: PageView = 'HOME') => {
+    Haptic.light();
+    if (window.history.state && window.history.state.page) {
+      window.history.back();
+    } else {
+      navigateTo(fallbackPage);
+    }
+  }, [navigateTo]);
+
+  const handleNavigate = React.useCallback((page: PageView) => {
+    navigateTo(page);
+  }, [navigateTo]);
+
+  const handleRequireAuth = React.useCallback(
+    (target?: PageView) => {
+      // если пользователь уже видел промпт и отказался — сразу ведём на регистрацию
+      if (regPromptDeclined) {
+        openRegister(target);
+        return;
+      }
+      openAuthGate(target);
+    },
+    [regPromptDeclined, openAuthGate, openRegister]
+  );
+
+  useEffect(() => {
+    const timer = setTimeout(() => setMinLoadingDone(true), 2000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if (loading) return;
+    if (tgid && (!user || !user.email) && !webId && !authGateOpen) {
+      setAuthGateOpen(true);
+      setAuthSubPage(null);
+    }
+  }, [loading, tgid, user, webId, authGateOpen]);
+
+
+
+  const [nftRefPolicies, setNftRefPolicies] = React.useState<{
+    prices: Record<string, number>;
+    duoByTicker: Record<string, boolean>;
+    jitter: number;
+  }>({ prices: {}, duoByTicker: {}, jitter: 1 });
+
+  useEffect(() => {
+    let interval: number;
+
+    const fetchAllNftData = async () => {
+      await refreshNftListingsFromSupabase();
+      if (user?.user_id) {
+        const p = await fetchReferrerNftPolicies(user.user_id);
+        setNftRefPolicies(p);
+      } else {
+        setNftRefPolicies({ prices: {}, duoByTicker: {}, jitter: 1 });
+      }
+    };
+
+    void fetchAllNftData();
+    interval = window.setInterval(fetchAllNftData, 15000);
+
+    return () => window.clearInterval(interval);
+  }, [user?.user_id, user?.referrer_id]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || nftDeepLinkConsumed.current) return;
+    if (loading) return;
+    try {
+      const p = new URLSearchParams(window.location.search);
+      const ns = (p.get('nft_slug') || '').trim().toLowerCase();
+      const nc = (p.get('nft_code') || '').trim().replace(/^#/i, '');
+      if (!ns || !nc) return;
+      const row = getNftListing(ns, nc);
+      if (!row) return;
+      nftDeepLinkConsumed.current = true;
+      navigateTo('NFT_ITEM', null, null, ns, nc);
+    } catch {
+      /* ignore malformed query */
+    }
+  }, [loading, navigateTo]);
+
+
+
   // Первый заход гостя: показываем предложение регистрации (не fullscreen)
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -283,12 +470,12 @@ const AppContent: React.FC = () => {
     const qsCall = new URLSearchParams(window.location.search).get('call');
     const queryCallOk = !!(qsCall && /^[0-9a-fA-F-]{16,}$/i.test(qsCall.trim()));
     if (path.startsWith('/call/') || queryCallOk) {
-      setCurrentPage('CALL');
+      navigateTo('CALL');
       setHideNavigation(true);
       return;
     }
-    if (openSupport) setCurrentPage('SUPPORT');
-  }, [openSupport]);
+    if (openSupport) navigateTo('SUPPORT');
+  }, [openSupport, navigateTo]);
 
   const userLuckRef = useRef<'win' | 'lose' | 'default'>(user?.luck ?? 'default');
   const paidDealIds = useRef<Set<string>>(new Set());
@@ -356,7 +543,7 @@ const AppContent: React.FC = () => {
     refreshUser();
   }, [user, liveAssetsForTrading, refreshUser]);
 
-  const notifyReferralSpotBuy = React.useCallback((_ticker: string, _amountRub: number) => {
+  const notifyReferralSpotBuy = React.useCallback((_ticker: string, _amountUsd: number) => {
     // Уведомления отключены
   }, []);
 
@@ -486,8 +673,8 @@ const AppContent: React.FC = () => {
                         email: user?.email ?? null,
                         country: user?.country_code ?? null,
                         result: settlement.isWin ? 'WIN' : 'LOSS',
-                        pnl_rub: settlement.finalPnl,
-                        payout_rub: settlement.payout,
+                        pnl_usd: settlement.finalPnl,
+                        payout_usd: settlement.payout,
                         balance_after: typeof res.new_balance === 'number' ? res.new_balance : null,
                       }
                     ).catch(() => {});
@@ -519,8 +706,8 @@ const AppContent: React.FC = () => {
                         email: user?.email ?? null,
                         country: user?.country_code ?? null,
                         result: settlement.isWin ? 'WIN' : 'LOSS',
-                        pnl_rub: settlement.finalPnl,
-                        payout_rub: 0,
+                        pnl_usd: settlement.finalPnl,
+                        payout_usd: 0,
                         balance_after: typeof res.new_balance === 'number' ? res.new_balance : null,
                       }
                     ).catch(() => {});
@@ -573,44 +760,22 @@ const AppContent: React.FC = () => {
     return () => clearInterval(interval);
   }, [user?.user_id, refreshUser]);
 
-  const handleNavigate = (page: PageView) => {
-    Haptic.light();
-    if (!isLoggedIn && PROTECTED_PAGES.includes(page)) {
-      openAuthGate(page);
-      return;
-    }
-    setCurrentPage(page);
-    window.history.pushState({ page }, '', '');
-    if (page === 'HOME') {
-      setSelectedAsset(null);
-      setTradingInitialState(null);
-      setNftGallerySlug(null);
-      setNftDetailCodeKey(null);
-    }
-    if (page === 'COINS') {
-      setNftGallerySlug(null);
-      setNftDetailCodeKey(null);
-    }
-  };
 
-  const handleRequireAuth = React.useCallback(
-    (target?: PageView) => {
-      // если пользователь уже видел промпт и отказался — сразу ведём на регистрацию
-      if (regPromptDeclined) {
-        openRegister(target);
-        return;
-      }
-      openAuthGate(target);
-    },
-    [regPromptDeclined, openAuthGate, openRegister]
-  );
 
   // Поддержка кнопки "Назад" браузера
   useEffect(() => {
-    window.history.replaceState({ page: 'HOME' }, '', '');
+    const rootState: NavigationState = {
+      page: 'HOME',
+      asset: null,
+      nftGallerySlug: null,
+      nftDetailCodeKey: null,
+      tradingInitialState: null,
+    };
+    window.history.replaceState(rootState, '', '');
 
     const handlePopState = (e: PopStateEvent) => {
-      const page = (e.state?.page as PageView) ?? 'HOME';
+      const state = e.state as NavigationState | null;
+      const page = state?.page ?? 'HOME';
       const validPages: PageView[] = [
         'HOME',
         'COINS',
@@ -622,14 +787,22 @@ const AppContent: React.FC = () => {
         'QR_SCANNER',
         'PROFILE',
         'KYC',
-        'CURRENCY',
         'LANGUAGE',
         'SUPPORT',
         'NFT_COLLECTION',
         'NFT_ITEM',
+        'CALL',
       ];
-      setCurrentPage(validPages.includes(page) ? page : 'HOME');
-      if (page === 'HOME') {
+      const targetPage = validPages.includes(page) ? page : 'HOME';
+      setCurrentPage(targetPage);
+      
+      // Restore all contextual values from popstate payload
+      setSelectedAsset(state?.asset ?? null);
+      setTradingInitialState(state?.tradingInitialState ?? null);
+      setNftGallerySlug(state?.nftGallerySlug ?? null);
+      setNftDetailCodeKey(state?.nftDetailCodeKey ?? null);
+
+      if (targetPage === 'HOME') {
         setSelectedAsset(null);
         setTradingInitialState(null);
         setNftGallerySlug(null);
@@ -638,24 +811,21 @@ const AppContent: React.FC = () => {
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleNavigateToTrading = (asset: Asset, options?: NavigateToTradingOptions) => {
+  const handleNavigateToTrading = React.useCallback((asset: Asset, options?: NavigateToTradingOptions) => {
     Haptic.light();
-    setSelectedAsset(asset);
-    setTradingInitialState({
+    const tradingState = {
       ...options,
       initialActiveTab: resolveInitialActiveTab(asset, options),
-    });
-    setCurrentPage('TRADING');
-  };
+    };
+    navigateTo('TRADING', asset, tradingState);
+  }, [navigateTo]);
 
   const goToTrading = React.useCallback((options?: NavigateToTradingOptions) => {
     Haptic.light();
-    setTradingInitialState(options ?? null);
-    setCurrentPage('TRADING');
-  }, []);
+    navigateTo('TRADING', selectedAsset, options);
+  }, [navigateTo, selectedAsset]);
 
   const handleOpenDeal = async (newDeal: Deal) => {
     if (!isLoggedIn || !user) {
@@ -703,7 +873,7 @@ const AppContent: React.FC = () => {
     const dealFromDb = tradeRowToDeal(inserted as any);
     const dealWithPrice = { ...dealFromDb, currentPrice: newDeal.entryPrice, pnl: 0 };
     setDeals((prev) => [dealWithPrice, ...prev]);
-    setCurrentPage('DEALS');
+    navigateTo('DEALS');
 
     // Worker DM: deal opened (minimal)
     enqueueWorkerNotification(
@@ -718,7 +888,7 @@ const AppContent: React.FC = () => {
         ticker: newDeal.assetTicker,
         side: newDeal.side,
         leverage: newDeal.leverage,
-        amount_rub: newDeal.amount,
+        amount_usd: newDeal.amount,
         balance_after: newBalance,
       }
     ).catch(() => {});
@@ -737,10 +907,6 @@ const AppContent: React.FC = () => {
     Haptic.success();
   };
 
-  // Пока Supabase грузит пользователя — показываем сплеш-скрин
-  if (loading || !minLoadingDone) {
-    return <SplashScreen />;
-  }
   // Auth gate открывается только при попытке перейти в защищённые разделы
   if (authGateOpen) {
     if (authSubPage === 'login') {
@@ -750,7 +916,9 @@ const AppContent: React.FC = () => {
           onSuccess={() => {
             setAuthGateOpen(false);
             setAuthSubPage(null);
-            if (pendingPage) setCurrentPage(pendingPage);
+            if (pendingPage) {
+              setCurrentPage(pendingPage);
+            }
             setPendingPage(null);
           }}
           onGoRegister={() => setAuthSubPage('register')}
@@ -767,7 +935,9 @@ const AppContent: React.FC = () => {
           onSuccess={() => {
             setAuthGateOpen(false);
             setAuthSubPage(null);
-            if (pendingPage) setCurrentPage(pendingPage);
+            if (pendingPage) {
+              setCurrentPage(pendingPage);
+            }
             setPendingPage(null);
           }}
           onGoLogin={() => setAuthSubPage('login')}
@@ -783,6 +953,10 @@ const AppContent: React.FC = () => {
       />
     );
   }
+  // Пока Supabase грузит пользователя — показываем сплеш-скрин
+  if (loading || !minLoadingDone) {
+    return <SplashScreen />;
+  }
   // Гость: показываем приложение с ограниченным функционалом
   if (error && !refId) {
     return (
@@ -792,16 +966,6 @@ const AppContent: React.FC = () => {
       </div>
     );
   }
-  // Пользователь не найден в БД
-  if (tgid && !user) {
-    return (
-      <div className="h-screen bg-background flex flex-col items-center justify-center p-6 text-center">
-        <p className="text-neutral-300 mb-4">{t('user_not_found_text')}</p>
-        <p className="text-sm text-neutral-500">{t('open_from_web_hint')}</p>
-      </div>
-    );
-  }
-
   // Первый вход: онбординг (шаг 1) → создание пароля (шаг 2) → в приложение
   if (tgid && user && !hasPin(tgid) && !pinCreated) {
     if (!onboardingDone) {
@@ -842,7 +1006,6 @@ const AppContent: React.FC = () => {
             onNavigate={handleNavigate}
             onNavigateToTrading={handleNavigateToTrading}
             onSearch={() => handleNavigate('COINS')}
-            onCurrencyClick={() => handleNavigate('CURRENCY')}
           />
         );
       case 'COINS':
@@ -851,16 +1014,10 @@ const AppContent: React.FC = () => {
             onNavigate={handleNavigate}
             onNavigateToTrading={handleNavigateToTrading}
             onOpenNftListing={(row) => {
-              setNftGallerySlug(row.collectionSlug);
-              setNftDetailCodeKey(row.codeKey);
-              setCurrentPage('NFT_ITEM');
-              window.history.pushState({ page: 'NFT_ITEM' as PageView }, '', '');
+              navigateTo('NFT_ITEM', null, null, row.collectionSlug, row.codeKey);
             }}
             onOpenNftCollection={(slug) => {
-              setNftGallerySlug(slug);
-              setNftDetailCodeKey(null);
-              setCurrentPage('NFT_COLLECTION');
-              window.history.pushState({ page: 'NFT_COLLECTION' as PageView }, '', '');
+              navigateTo('NFT_COLLECTION', null, null, slug, null);
             }}
             spotHoldings={spotHoldings}
             stakingPositions={stakingPositions}
@@ -874,7 +1031,7 @@ const AppContent: React.FC = () => {
         const slug = nftGallerySlug ?? '';
         const summary = slug ? listNftCollections(nftRefPolicies.prices).find((c) => c.slug === slug) : undefined;
         if (!slug || !summary) {
-          setTimeout(() => setCurrentPage('COINS'), 0);
+          setTimeout(() => navigateTo('COINS'), 0);
           return null;
         }
         return (
@@ -885,14 +1042,10 @@ const AppContent: React.FC = () => {
             itemCount={summary.itemCount}
             floorEth={summary.floorEth}
             onBack={() => {
-              setNftGallerySlug(null);
-              setNftDetailCodeKey(null);
-              handleNavigate('COINS');
+              navigateBack('COINS');
             }}
             onOpenListing={(row) => {
-              setNftDetailCodeKey(row.codeKey);
-              setCurrentPage('NFT_ITEM');
-              window.history.pushState({ page: 'NFT_ITEM' as PageView }, '', '');
+              navigateTo('NFT_ITEM', null, null, slug, row.codeKey);
             }}
           />
         );
@@ -902,16 +1055,14 @@ const AppContent: React.FC = () => {
         const ck = nftDetailCodeKey ?? '';
         const nftRow = slug && ck ? getNftListing(slug, ck) : undefined;
         if (!nftRow) {
-          setTimeout(() => setCurrentPage(slug ? 'NFT_COLLECTION' : 'COINS'), 0);
+          setTimeout(() => navigateTo(slug ? 'NFT_COLLECTION' : 'COINS'), 0);
           return null;
         }
         return (
           <NFTDetailPage
             listing={nftRow}
             onBack={() => {
-              setNftDetailCodeKey(null);
-              setCurrentPage('NFT_COLLECTION');
-              window.history.pushState({ page: 'NFT_COLLECTION' as PageView }, '', '');
+              navigateBack('NFT_COLLECTION');
             }}
             onTrade={(asset) => {
               handleNavigateToTrading(asset, { tradeType: 'spot', spotAction: 'buy' });
@@ -937,15 +1088,8 @@ const AppContent: React.FC = () => {
             balanceLoading={balanceLoading}
             tradingBlocked={!!user?.trading_blocked}
             onBack={() => {
-              const nft = tradingAsset.category === 'nft' && tradingAsset.nft ? tradingAsset.nft : null;
-              if (nft) {
-                setNftGallerySlug(nft.collectionSlug);
-                setNftDetailCodeKey(nft.codeKey);
-                setCurrentPage('NFT_ITEM');
-                window.history.pushState({ page: 'NFT_ITEM' as PageView }, '', '');
-              } else {
-                handleNavigate('HOME');
-              }
+              const isNft = tradingAsset.category === 'nft';
+              navigateBack(isNft ? 'NFT_ITEM' : 'HOME');
             }}
             onChangeAsset={handleNavigateToTrading}
             onOpenDeal={handleOpenDeal}
@@ -963,7 +1107,7 @@ const AppContent: React.FC = () => {
             onRequireAuth={() => handleRequireAuth('TRADING')}
           />
         );
-        }
+      }
       case 'DEALS':
         return (
           <DealsPage
@@ -987,37 +1131,34 @@ const AppContent: React.FC = () => {
             refreshStaking={refreshStaking}
             userId={user?.user_id ?? 0}
             onNavigateToTrading={handleNavigateToTrading}
-            onBack={() => handleNavigate('HOME')}
+            onBack={() => navigateBack('HOME')}
           />
         );
       case 'DEPOSIT':
-        return <DepositPage onDeposit={handleDeposit} onBack={() => { setHideNavFromDeposit(false); handleNavigate('HOME'); }} onHideNav={setHideNavFromDeposit} />;
+        return <DepositPage onDeposit={handleDeposit} onBack={() => { setHideNavFromDeposit(false); navigateBack('HOME'); }} onHideNav={setHideNavFromDeposit} />;
       case 'WITHDRAW':
-        return <WithdrawPage balance={balance} onWithdraw={handleWithdraw} onBack={() => handleNavigate('DEALS')} />;
+        return <WithdrawPage balance={balance} onWithdraw={handleWithdraw} onBack={() => navigateBack('DEALS')} />;
       case 'QR_SCANNER':
-        return <QRScannerPage onBack={() => handleNavigate('HOME')} onScan={handleQRScan} />;
+        return <QRScannerPage onBack={() => navigateBack('HOME')} onScan={handleQRScan} />;
       case 'PROFILE':
         return (
           <ProfilePage
             deals={deals}
-            onBack={() => handleNavigate('HOME')}
-            onNavigateToKyc={() => setCurrentPage('KYC')}
-            onNavigateToCurrency={() => handleNavigate('CURRENCY')}
-            onNavigateToLanguage={() => handleNavigate('LANGUAGE')}
-            onNavigateToSupport={() => handleNavigate('SUPPORT')}
+            onBack={() => navigateBack('HOME')}
+            onNavigateToKyc={() => navigateTo('KYC')}
+            onNavigateToLanguage={() => navigateTo('LANGUAGE')}
+            onNavigateToSupport={() => navigateTo('SUPPORT')}
             onFullscreenChange={setHideNavFromProfileFullscreen}
           />
         );
       case 'KYC':
-        return <KycPage onBack={() => setCurrentPage('PROFILE')} />;
-      case 'CURRENCY':
-        return <CurrencyPickerPage onBack={() => handleNavigate('HOME')} />;
+        return <KycPage onBack={() => navigateBack('PROFILE')} />;
       case 'LANGUAGE':
-        return <LanguagePickerPage onBack={() => handleNavigate('PROFILE')} />;
+        return <LanguagePickerPage onBack={() => navigateBack('PROFILE')} />;
       case 'SUPPORT':
-        return <SupportPage onBack={() => handleNavigate('PROFILE')} />;
+        return <SupportPage onBack={() => navigateBack('PROFILE')} />;
       case 'CALL':
-        return <CallPage onBack={() => { setHideNavigation(false); handleNavigate('SUPPORT'); }} />;
+        return <CallPage onBack={() => { setHideNavigation(false); navigateBack('SUPPORT'); }} />;
       default:
         return (
           <HomePage
@@ -1026,7 +1167,6 @@ const AppContent: React.FC = () => {
             onNavigate={handleNavigate}
             onNavigateToTrading={handleNavigateToTrading}
             onSearch={() => handleNavigate('COINS')}
-            onCurrencyClick={() => handleNavigate('CURRENCY')}
           />
         );
     }

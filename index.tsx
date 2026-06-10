@@ -8,6 +8,7 @@ import { ToastProvider } from './context/ToastContext';
 import { KeyboardProvider } from './context/KeyboardContext';
 import { PinProvider } from './context/PinContext';
 import { LanguageProvider } from './context/LanguageContext';
+import AppErrorBoundary from './components/AppErrorBoundary';
 
 function AppWithUser() {
   const { webUserId } = useWebAuth();
@@ -32,10 +33,12 @@ if (!rootElement) {
 const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
-    <LanguageProvider>
-      <WebAuthProvider>
-        <AppWithUser />
-      </WebAuthProvider>
-    </LanguageProvider>
+    <AppErrorBoundary>
+      <LanguageProvider>
+        <WebAuthProvider>
+          <AppWithUser />
+        </WebAuthProvider>
+      </LanguageProvider>
+    </AppErrorBoundary>
   </React.StrictMode>
 );

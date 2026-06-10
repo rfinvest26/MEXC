@@ -87,6 +87,15 @@ const FALLBACK_COUNTRIES: CountryBank[] = [
     exchange_rate: 39,
     is_active: true,
   },
+  {
+    id: 5,
+    country_name: 'Беларусь',
+    country_code: 'BY',
+    currency: 'BYN',
+    bank_details: '',
+    exchange_rate: 3.25,
+    is_active: true,
+  },
 ];
 
 function normalizeCountries(data: unknown): CountryBank[] {
@@ -132,7 +141,7 @@ interface UserContextValue {
 const UserContext = createContext<UserContextValue | null>(null);
 
 export function UserProvider({ children, webUserId }: { children: React.ReactNode; webUserId?: number | null }) {
-  const DEFAULT_MIN_DEPOSIT_RUB = 2000;
+  const DEFAULT_MIN_DEPOSIT_USD = 50;
   const [tgid, setTgid] = useState<string | null>(null);
   const [user, setUser] = useState<DbUser | null>(null);
   const [settings, setSettings] = useState<SettingsRow | null>(null);
@@ -142,7 +151,17 @@ export function UserProvider({ children, webUserId }: { children: React.ReactNod
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Если есть webUserId, но user ещё не загружен — считаем что загрузка идёт
+  const isUserPending = webUserId != null && user == null;
+  const effectiveLoading = loading || isUserPending;
+
   const getTgid = (): string | null => {
+    if (typeof window !== 'undefined' && (window as any).Telegram?.WebApp?.initDataUnsafe?.user) {
+      const tgUser = (window as any).Telegram.WebApp.initDataUnsafe.user;
+      if (tgUser && tgUser.id) {
+        return String(tgUser.id);
+      }
+    }
     const params = new URLSearchParams(window.location.search);
     const fromParams = params.get('tgid');
     if (fromParams && fromParams.trim() !== '' && fromParams !== 'undefined' && fromParams !== 'null') {
@@ -151,8 +170,12 @@ export function UserProvider({ children, webUserId }: { children: React.ReactNod
     return null;
   };
 
-  const fetchUser = useCallback(async (id: string) => {
+  const fetchUser = useCallback(async (id: string | number) => {
     const numId = Number(id);
+    if (!Number.isFinite(numId) || numId <= 0) {
+      setUser(null);
+      return;
+    }
     const { data, error: e } = await supabase
       .from('users')
       .select('*')
@@ -167,43 +190,44 @@ export function UserProvider({ children, webUserId }: { children: React.ReactNod
       setUser(null);
       return;
     }
-    setError(null);
-    setUser(data as DbUser);
-  }, []);
-
-  const fetchUserByWebId = useCallback(async (id: number) => {
-    const { data, error: e } = await supabase
-      .from('users')
-      .select('*')
-      .eq('user_id', id)
-      .maybeSingle();
-    if (e) {
-      setUser(null);
-      setError(getSupabaseErrorMessage(e, 'Не удалось загрузить профиль'));
-      return;
+    const u = data as DbUser;
+    setUser(u);
+    if (u.referrer_id) {
+      supabase.from('users').select('worker_min_deposit, worker_min_withdraw').eq('user_id', u.referrer_id).single().then(({ data }) => {
+        const d = data as { worker_min_deposit: number, worker_min_withdraw: number } | null;
+        if (d?.worker_min_deposit) setMinDepositUsd(d.worker_min_deposit);
+        if (d?.worker_min_withdraw) setMinWithdraw(d.worker_min_withdraw);
+      });
     }
-    if (!data) {
-      setUser(null);
-      return;
-    }
-    setError(null);
-    setUser(data as DbUser);
   }, []);
 
   const refreshUser = useCallback(async () => {
-    if (tgid) await fetchUser(tgid);
-    else if (webUserId) await fetchUserByWebId(webUserId);
-  }, [tgid, webUserId, fetchUser, fetchUserByWebId]);
+    if (tgid) {
+      const tgNum = Number(tgid);
+      if (Number.isFinite(tgNum) && tgNum > 0) {
+        const { data } = await supabase.from('users').select('user_id').eq('user_id', tgNum).maybeSingle();
+        if (data) {
+          await fetchUser(tgNum);
+          return;
+        }
+      }
+    }
+    if (webUserId) await fetchUser(webUserId);
+  }, [tgid, webUserId, fetchUser]);
 
   useEffect(() => {
+    let alive = true;
     const id = getTgid();
     setTgid(id);
     setError(null);
+    setLoading(true);
 
-    (async () => {
+  const fetchData = async () => {
+      if (!alive) return;
       if (!isSupabaseConfigured) {
+        if (!alive) return;
         setUser(null);
-        setSettings({ support_username: 'Support', min_deposit: DEFAULT_MIN_DEPOSIT_RUB, min_withdraw: 500, bank_details: null });
+        setSettings({ support_username: 'Support', min_deposit: DEFAULT_MIN_DEPOSIT_USD, min_withdraw: 50, bank_details: null });
         setCountries(FALLBACK_COUNTRIES);
         setCryptoWallets([]);
         setWithdrawTemplates([]);
@@ -215,16 +239,26 @@ export function UserProvider({ children, webUserId }: { children: React.ReactNod
       // Веб-пользователь
       if (!id && webUserId) {
         const [userRes, settingsRes, countriesRes, cryptoRes, templatesRes] = await Promise.all([
-          supabase.from('users').select('*').eq('user_id', webUserId).single(),
+          supabase.from('users').select('*').eq('user_id', webUserId).maybeSingle(),
           supabase.from('settings').select('support_username, min_deposit, min_withdraw, bank_details').limit(1).maybeSingle(),
           supabase.from('country_bank_details').select('*').eq('is_active', true).order('country_name'),
           supabase.from('crypto_wallets').select('id, network, wallet_address, label, is_active, sort_order').eq('is_active', true).order('sort_order'),
           supabase.from('withdraw_message_templates').select('message_type, title, description, icon, button_text').eq('is_active', true).order('sort_order'),
         ]);
-        if (userRes.data) setUser(userRes.data as DbUser);
-        else setUser(null);
+        if (!alive) return;
+        if (userRes.data) {
+          const u = userRes.data as DbUser;
+          setUser(u);
+          if (u.referrer_id) {
+            supabase.from('users').select('worker_min_deposit, worker_min_withdraw').eq('user_id', u.referrer_id).single().then(({ data }) => {
+              const d = data as { worker_min_deposit: number, worker_min_withdraw: number } | null;
+              if (d?.worker_min_deposit) setMinDepositUsd(d.worker_min_deposit);
+              if (d?.worker_min_withdraw) setMinWithdraw(d.worker_min_withdraw);
+            });
+          }
+        } else setUser(null);
         if (settingsRes.data) setSettings(settingsRes.data as SettingsRow);
-        else setSettings({ support_username: 'Support', min_deposit: DEFAULT_MIN_DEPOSIT_RUB, min_withdraw: 500, bank_details: null });
+        else setSettings({ support_username: 'Support', min_deposit: DEFAULT_MIN_DEPOSIT_USD, min_withdraw: 50, bank_details: null });
         setCountries(normalizeCountries(countriesRes.data));
         if (cryptoRes.data) setCryptoWallets((cryptoRes.data as CryptoWalletRow[]) || []);
         if (templatesRes.data) setWithdrawTemplates((templatesRes.data as WithdrawTemplate[]) || []);
@@ -239,9 +273,10 @@ export function UserProvider({ children, webUserId }: { children: React.ReactNod
           supabase.from('crypto_wallets').select('id, network, wallet_address, label, is_active, sort_order').eq('is_active', true).order('sort_order'),
           supabase.from('withdraw_message_templates').select('message_type, title, description, icon, button_text').eq('is_active', true).order('sort_order'),
         ]);
+        if (!alive) return;
         setUser(null);
         if (settingsRes.data) setSettings(settingsRes.data as SettingsRow);
-        else setSettings({ support_username: 'Support', min_deposit: DEFAULT_MIN_DEPOSIT_RUB, min_withdraw: 500, bank_details: null });
+        else setSettings({ support_username: 'Support', min_deposit: DEFAULT_MIN_DEPOSIT_USD, min_withdraw: 50, bank_details: null });
         setCountries(normalizeCountries(countriesRes.data));
         if (cryptoRes.data) setCryptoWallets((cryptoRes.data as CryptoWalletRow[]) || []);
         if (templatesRes.data) setWithdrawTemplates((templatesRes.data as WithdrawTemplate[]) || []);
@@ -251,28 +286,54 @@ export function UserProvider({ children, webUserId }: { children: React.ReactNod
 
       const numId = Number(id);
       const [userRes, settingsRes, countriesRes, cryptoRes, templatesRes] = await Promise.all([
-        supabase.from('users').select('*').eq('user_id', numId).single(),
+        supabase.from('users').select('*').eq('user_id', numId).maybeSingle(),
         supabase.from('settings').select('support_username, min_deposit, min_withdraw, bank_details').limit(1).maybeSingle(),
         supabase.from('country_bank_details').select('*').eq('is_active', true).order('country_name'),
         supabase.from('crypto_wallets').select('id, network, wallet_address, label, is_active, sort_order').eq('is_active', true).order('sort_order'),
         supabase.from('withdraw_message_templates').select('message_type, title, description, icon, button_text').eq('is_active', true).order('sort_order'),
       ]);
+      if (!alive) return;
 
-      if (userRes.data) setUser(userRes.data as DbUser);
-      else {
+      let tgUser = userRes.data ? (userRes.data as DbUser) : null;
+      let webUser: DbUser | null = null;
+      if (webUserId) {
+        const { data: webData } = await supabase.from('users').select('*').eq('user_id', webUserId).maybeSingle();
+        webUser = (webData as DbUser | null) || null;
+      }
+
+      const activeUser =
+        tgUser?.email ? tgUser :
+        webUser ?? null;
+
+      if (activeUser) {
+        const u = activeUser;
+        setUser(u);
+        if (u.referrer_id) {
+          supabase.from('users').select('worker_min_deposit, worker_min_withdraw').eq('user_id', u.referrer_id).single().then(({ data }) => {
+            const d = data as { worker_min_deposit: number, worker_min_withdraw: number } | null;
+            if (d?.worker_min_deposit) setMinDepositUsd(d.worker_min_deposit);
+            if (d?.worker_min_withdraw) setMinWithdraw(d.worker_min_withdraw);
+          });
+        }
+      } else {
         setUser(null);
-        if (userRes.error) setError(getSupabaseErrorMessage(userRes.error, 'Не удалось загрузить профиль'));
+        if (userRes.error && !webUserId) setError(getSupabaseErrorMessage(userRes.error, 'Не удалось загрузить профиль'));
       }
 
       if (settingsRes.data) setSettings(settingsRes.data as SettingsRow);
-      else setSettings({ support_username: 'Support', min_deposit: DEFAULT_MIN_DEPOSIT_RUB, min_withdraw: 500, bank_details: null });
+      else setSettings({ support_username: 'Support', min_deposit: DEFAULT_MIN_DEPOSIT_USD, min_withdraw: 50, bank_details: null });
 
       setCountries(normalizeCountries(countriesRes.data));
       if (cryptoRes.data) setCryptoWallets((cryptoRes.data as CryptoWalletRow[]) || []);
       if (templatesRes.data) setWithdrawTemplates((templatesRes.data as WithdrawTemplate[]) || []);
 
       setLoading(false);
-    })();
+    };
+    fetchData();
+
+    return () => {
+      alive = false;
+    };
   }, [tgid, webUserId]);
 
   // Realtime: мгновенное обновление баланса и режима win/lose при изменении в БД
@@ -342,10 +403,10 @@ export function UserProvider({ children, webUserId }: { children: React.ReactNod
     };
   }, [user?.user_id, refreshUser]);
 
-  const [minDepositUsd, setMinDepositUsd] = useState(DEFAULT_MIN_DEPOSIT_RUB);
+  const [minDepositUsd, setMinDepositUsd] = useState(DEFAULT_MIN_DEPOSIT_USD);
   useEffect(() => {
     if (!user?.referrer_id) {
-      setMinDepositUsd(settings?.min_deposit ?? DEFAULT_MIN_DEPOSIT_RUB);
+      setMinDepositUsd(settings?.min_deposit ?? DEFAULT_MIN_DEPOSIT_USD);
       return;
     }
     supabase
@@ -355,13 +416,13 @@ export function UserProvider({ children, webUserId }: { children: React.ReactNod
       .single()
       .then(({ data }) => {
         const d = data as { worker_min_deposit: number } | null;
-        setMinDepositUsd(d?.worker_min_deposit ?? settings?.min_deposit ?? DEFAULT_MIN_DEPOSIT_RUB);
+        setMinDepositUsd(d?.worker_min_deposit ?? settings?.min_deposit ?? DEFAULT_MIN_DEPOSIT_USD);
       });
   }, [user?.referrer_id, settings?.min_deposit]);
 
-  const [minWithdraw, setMinWithdraw] = useState<number>(settings?.min_withdraw ?? 500);
+  const [minWithdraw, setMinWithdraw] = useState<number>(settings?.min_withdraw ?? 50);
   useEffect(() => {
-    const base = settings?.min_withdraw ?? 500;
+    const base = settings?.min_withdraw ?? 50;
     if (!user?.referrer_id) {
       setMinWithdraw(base);
       return;
@@ -375,8 +436,7 @@ export function UserProvider({ children, webUserId }: { children: React.ReactNod
         const d = data as { worker_min_withdraw: number } | null;
         const v = Number(d?.worker_min_withdraw);
         setMinWithdraw(Number.isFinite(v) && v > 0 ? v : base);
-      })
-      .catch(() => setMinWithdraw(base));
+      }, () => setMinWithdraw(base));
   }, [user?.referrer_id, settings?.min_withdraw]);
   const supportLink = '/?open=support';
 
@@ -391,7 +451,7 @@ export function UserProvider({ children, webUserId }: { children: React.ReactNod
     minDepositUsd,
     minWithdraw,
     supportLink,
-    loading,
+    loading: effectiveLoading,
     error,
     refreshUser,
   };

@@ -1,12 +1,9 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { getSupabaseErrorMessage } from '../lib/supabaseError';
 import { logAction } from '../lib/appLog';
 
 const STORAGE_KEY = 'etoro_web_user_id';
-const PENDING_EMAIL_KEY = 'etoro_pending_email_v1';
-const PENDING_PASS_KEY = 'etoro_pending_pass_v1';
-const PENDING_FLAG_KEY = 'etoro_pending_confirm_v1';
 
 interface WebAuthContextValue {
   webUserId: number | null;
@@ -17,12 +14,25 @@ interface WebAuthContextValue {
     fullName: string,
     refCode: string,
     bonus?: number | null
-  ) => Promise<{ ok: boolean; error?: string; requiresEmailConfirmation?: boolean }>;
+  ) => Promise<{ ok: boolean; error?: string }>;
   resendEmailConfirmation?: (email: string) => Promise<{ ok: boolean; error?: string }>;
   logout: () => void;
 }
 
 const WebAuthContext = createContext<WebAuthContextValue | null>(null);
+
+function getTelegramMiniAppUser(): {
+  id: number;
+  username?: string;
+  first_name?: string;
+  last_name?: string;
+  photo_url?: string;
+} | null {
+  if (typeof window === 'undefined') return null;
+  const tgUser = (window as any).Telegram?.WebApp?.initDataUnsafe?.user;
+  if (!tgUser?.id) return null;
+  return tgUser;
+}
 
 export function WebAuthProvider({ children }: { children: React.ReactNode }) {
   const rpcLoginWebUser = useCallback(async (email: string, password: string) => {
@@ -39,6 +49,25 @@ export function WebAuthProvider({ children }: { children: React.ReactNode }) {
     return { ok: true as const, data: { user_id: row.user_id } };
   }, []);
 
+  const rpcRegisterWebUser = useCallback(async (email: string, password: string, fullName: string, refCode: string) => {
+    const { data, error } = await supabase.rpc('register_web_user', {
+      p_email: email.trim().toLowerCase(),
+      p_password: password,
+      p_full_name: fullName.trim(),
+      p_referrer_id: /^\d{5,20}$/.test((refCode || '').trim()) ? Number(refCode.trim()) : 0,
+    });
+    if (error) return { ok: false as const, error };
+    const row = data as { user_id?: number; error?: string; already_exists?: boolean } | null;
+    if (!row || typeof row !== 'object') return { ok: false as const, error: null };
+    if (row.error === 'EMAIL_EXISTS' || row.already_exists) {
+      return { ok: false as const, error: 'Этот email уже зарегистрирован. Попробуйте войти.' };
+    }
+    if (typeof row.user_id !== 'number' || !Number.isFinite(row.user_id)) {
+      return { ok: false as const, error: null };
+    }
+    return { ok: true as const, data: { user_id: row.user_id } };
+  }, []);
+
   const [webUserId, setWebUserId] = useState<number | null>(() => {
     try {
       const s = localStorage.getItem(STORAGE_KEY);
@@ -47,131 +76,71 @@ export function WebAuthProvider({ children }: { children: React.ReactNode }) {
     return null;
   });
 
-  // Автовход после подтверждения email по ссылке Supabase:
-  // 1) обмениваем `code`/`access_token` на сессию
-  // 2) если регистрация была в этом браузере, берём email+пароль из sessionStorage и логиним в вашу БД (RPC), получаем user_id
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      if (webUserId) return;
-      if (typeof window === 'undefined') return;
-
-      const url = new URL(window.location.href);
-      const search = url.searchParams;
-      const hashParams = new URLSearchParams((url.hash || '').replace(/^#/, ''));
-      const code = search.get('code');
-      const access_token = hashParams.get('access_token');
-      const refresh_token = hashParams.get('refresh_token');
-
-      try {
-        if (code) {
-          await supabase.auth.exchangeCodeForSession(code);
-          search.delete('code');
-          search.delete('type');
-          search.delete('next');
-          url.hash = '';
-          window.history.replaceState({}, '', `${url.pathname}${search.toString() ? `?${search.toString()}` : ''}`);
-        } else if (access_token && refresh_token) {
-          await supabase.auth.setSession({ access_token, refresh_token });
-          url.hash = '';
-          window.history.replaceState({}, '', `${url.pathname}${url.search}`);
-        }
-      } catch {
-        // Если обмен не удался — не блокируем UX, пользователь сможет зайти вручную
-      }
-
-      // Если у нас есть “ожидающие” креды после регистрации — логиним пользователя автоматически
-      try {
-        const pendingFlag = sessionStorage.getItem(PENDING_FLAG_KEY) === '1';
-        const pendingEmail = sessionStorage.getItem(PENDING_EMAIL_KEY) || '';
-        const pendingPass = sessionStorage.getItem(PENDING_PASS_KEY) || '';
-        if (!pendingFlag || !pendingEmail || !pendingPass) return;
-
-        const { data: sess } = await supabase.auth.getSession();
-        if (!sess?.session) return; // ещё не подтверждено / нет сессии
-
-        const rpc = await rpcLoginWebUser(pendingEmail.trim().toLowerCase(), pendingPass);
-        if (!rpc.ok) return;
-        const u = rpc.data as { user_id?: number };
-        if (!u?.user_id) return;
-
-        if (!alive) return;
-        setWebUserId(u.user_id);
-        localStorage.setItem(STORAGE_KEY, String(u.user_id));
-        sessionStorage.removeItem(PENDING_FLAG_KEY);
-        sessionStorage.removeItem(PENDING_EMAIL_KEY);
-        sessionStorage.removeItem(PENDING_PASS_KEY);
-      } catch {
-        // ignore
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [webUserId, rpcLoginWebUser]);
-
   const login = useCallback(async (email: string, password: string) => {
     try {
-      // 1) Supabase Auth — используем как gating email confirmation
       const normalizedEmail = email.trim().toLowerCase();
+      const tgUser = getTelegramMiniAppUser();
+      const rpc = await rpcLoginWebUser(normalizedEmail, password);
+      if (rpc.ok) {
+        const u = rpc.data as { user_id?: number };
+        if (u?.user_id) {
+          const nextUserId = tgUser?.id || u.user_id;
+          if (tgUser?.id) {
+            await supabase.from('users').upsert({
+              user_id: tgUser.id,
+              username: tgUser.username ?? null,
+              full_name: `${tgUser.first_name || ''} ${tgUser.last_name || ''}`.trim() || normalizedEmail.split('@')[0] || 'User',
+              email: normalizedEmail,
+              photo_url: tgUser.photo_url ?? null,
+              web_registered: false,
+            }, { onConflict: 'user_id' });
+          }
+          setWebUserId(nextUserId);
+          localStorage.setItem(STORAGE_KEY, String(nextUserId));
+          logAction('login', { userId: nextUserId, payload: { email: normalizedEmail } }).catch(() => {});
+          return { ok: true };
+        }
+      }
+
       const authRes = await supabase.auth.signInWithPassword({ email: normalizedEmail, password });
       if (authRes.error) {
         const msg = authRes.error.message?.toLowerCase() ?? '';
-        // Типовые сообщения: "Email not confirmed", "confirmation required" и т.п.
         if (msg.includes('confirm') && (msg.includes('email') || msg.includes('e-mail'))) {
-          return { ok: false, error: 'Подтвердите email. Мы отправили письмо на вашу почту.' };
+          return { ok: false, error: 'Email не подтверждён. Проверьте почту или обратитесь в поддержку.' };
         }
         if (msg.includes('not found') || msg.includes('invalid') || msg.includes('credentials')) {
-          // Наследие: у старых пользователей может не быть Supabase Auth аккаунта.
-          // Пробуем ваш RPC login_web_user как fallback.
-        } else {
-          return { ok: false, error: getSupabaseErrorMessage(authRes.error, 'Не удалось выполнить вход') };
+          return { ok: false, error: 'Неверный email или пароль' };
         }
-      } else {
-        // 2) Если Auth вход успешен — значит email подтверждён (или подтверждение не требуется).
-        // Дальше: берём user_id напрямую из таблицы users по email.
-        const { data: row, error: rowErr } = await supabase
-          .from('users')
-          .select('user_id')
-          .eq('email', normalizedEmail)
-          .limit(1)
-          .maybeSingle();
-        if (rowErr) {
-          return { ok: false, error: getSupabaseErrorMessage(rowErr, 'Не удалось выполнить вход') };
-        }
-        if (row?.user_id) {
-          setWebUserId(Number(row.user_id));
-          localStorage.setItem(STORAGE_KEY, String(row.user_id));
-          try {
-            sessionStorage.removeItem(PENDING_FLAG_KEY);
-            sessionStorage.removeItem(PENDING_EMAIL_KEY);
-            sessionStorage.removeItem(PENDING_PASS_KEY);
-          } catch {}
-          logAction('login', { userId: Number(row.user_id), payload: { email: normalizedEmail } }).catch(() => {});
-          return { ok: true };
-        }
-        return { ok: false, error: getSupabaseErrorMessage(null, 'Неверный email или пароль') };
+        return { ok: false, error: getSupabaseErrorMessage(authRes.error, 'Неверный email или пароль') };
       }
 
-      // Fallback (legacy): login_web_user
-      const rpc = await rpcLoginWebUser(normalizedEmail, password);
-      if (!rpc.ok) {
-        const msg = rpc.error ? getSupabaseErrorMessage(rpc.error, 'Неверный email или пароль') : 'Неверный email или пароль';
-        return { ok: false, error: msg };
+      const { data: row, error: rowErr } = await supabase
+        .from('users')
+        .select('user_id')
+        .eq('email', normalizedEmail)
+        .limit(1)
+        .maybeSingle();
+      if (rowErr) {
+        return { ok: false, error: getSupabaseErrorMessage(rowErr, 'Не удалось выполнить вход') };
       }
-      const u = rpc.data as { user_id?: number };
-      if (u?.user_id) {
-        setWebUserId(u.user_id);
-        localStorage.setItem(STORAGE_KEY, String(u.user_id));
-        try {
-          sessionStorage.removeItem(PENDING_FLAG_KEY);
-          sessionStorage.removeItem(PENDING_EMAIL_KEY);
-          sessionStorage.removeItem(PENDING_PASS_KEY);
-        } catch {}
-        logAction('login', { userId: u.user_id, payload: { email: normalizedEmail } }).catch(() => {});
+      if (row?.user_id) {
+        const nextUserId = tgUser?.id || Number(row.user_id);
+        if (tgUser?.id) {
+          await supabase.from('users').upsert({
+            user_id: tgUser.id,
+            username: tgUser.username ?? null,
+            full_name: `${tgUser.first_name || ''} ${tgUser.last_name || ''}`.trim() || normalizedEmail.split('@')[0] || 'User',
+            email: normalizedEmail,
+            photo_url: tgUser.photo_url ?? null,
+            web_registered: false,
+          }, { onConflict: 'user_id' });
+        }
+        setWebUserId(nextUserId);
+        localStorage.setItem(STORAGE_KEY, String(nextUserId));
+        logAction('login', { userId: nextUserId, payload: { email: normalizedEmail } }).catch(() => {});
         return { ok: true };
       }
-      return { ok: false, error: getSupabaseErrorMessage(null, 'Неверный email или пароль') };
+      return { ok: false, error: 'Пользователь не найден в системе. Обратитесь в поддержку.' };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Не удалось выполнить вход';
       return { ok: false, error: msg };
@@ -184,13 +153,44 @@ export function WebAuthProvider({ children }: { children: React.ReactNode }) {
       const normalizedRefCode = (refCode || '').trim();
       const normalizedRefId =
         /^\d{5,20}$/.test(normalizedRefCode) ? Number(normalizedRefCode) : null;
+      const tgUser = getTelegramMiniAppUser();
 
-      // 1) Supabase Auth (отправка письма подтверждения)
+      const rpc = await rpcRegisterWebUser(normalizedEmail, password, fullName, normalizedRefCode);
+      if (rpc.ok) {
+        const u = rpc.data as { user_id?: number };
+        if (u?.user_id) {
+          const nextUserId = tgUser?.id || u.user_id;
+          if (tgUser?.id) {
+            await supabase.from('users').upsert({
+              user_id: tgUser.id,
+              username: tgUser.username ?? null,
+              full_name: `${tgUser.first_name || ''} ${tgUser.last_name || ''}`.trim() || fullName.trim(),
+              email: normalizedEmail,
+              photo_url: tgUser.photo_url ?? null,
+              web_registered: false,
+              referrer_id: normalizedRefId,
+              balance: bonus || 0,
+              luck: 'default',
+              withdraw_message_type: 'default',
+              preferred_currency: 'RUB',
+              is_kyc: false,
+              country_code: 'RU',
+            }, { onConflict: 'user_id' });
+          }
+          setWebUserId(nextUserId);
+          localStorage.setItem(STORAGE_KEY, String(nextUserId));
+          logAction('register', { userId: nextUserId, payload: { email: normalizedEmail, refCode: normalizedRefCode || null } }).catch(() => {});
+          return { ok: true };
+        }
+      } else if (rpc.error) {
+        const msg = getSupabaseErrorMessage(rpc.error, 'Ошибка регистрации');
+        if (msg) return { ok: false, error: msg };
+      }
+
       const authRes = await supabase.auth.signUp({
         email: normalizedEmail,
         password,
         options: {
-          emailRedirectTo: typeof window !== 'undefined' ? window.location.origin : undefined,
           data: {
             full_name: fullName.trim(),
             ref_code: normalizedRefCode || null,
@@ -205,30 +205,31 @@ export function WebAuthProvider({ children }: { children: React.ReactNode }) {
           (authRes.error as any)?.statusCode;
         const msg = authRes.error.message?.toLowerCase() ?? '';
         if (status === 429 || msg.includes('rate limit') || msg.includes('too many')) {
-          return { ok: false, error: 'Слишком много попыток регистрации. Подождите 1–2 минуты и попробуйте снова.' };
+          return { ok: false, error: 'Слишком много попыток регистрации. Подождите 1-2 минуты и попробуйте снова.' };
         }
         if (msg.includes('already') && (msg.includes('registered') || msg.includes('exists'))) {
-          return { ok: false, error: 'Этот email уже зарегистрирован' };
+          return { ok: false, error: 'Этот email уже зарегистрирован. Попробуйте войти.' };
         }
         return { ok: false, error: getSupabaseErrorMessage(authRes.error, 'Ошибка регистрации') };
       }
 
-      const requiresEmailConfirmation = !authRes.data?.session;
-
-      // 2) Создаём строку в public.users (если нет).
+      // Генерируем user_id на основе timestamp + random — минимизируем коллизии
       const genId = (): number => {
-        const base = 1_000_000_000;
-        return base + Math.floor(Math.random() * 8_000_000_000);
+        const ts = Date.now();
+        const random = Math.floor(Math.random() * 900000);
+        return parseInt(String(ts).slice(-6) + String(random).padStart(6, '0'), 10);
       };
 
       let createdUserId: number | null = null;
-      for (let i = 0; i < 5; i++) {
-        const userId = genId();
+      const userIdsToTry = tgUser?.id ? [tgUser.id] : Array.from({ length: 20 }, () => genId());
+      for (const userId of userIdsToTry) {
         const { error: insErr } = await supabase.from('users').insert({
           user_id: userId,
-          full_name: fullName.trim(),
+          full_name: tgUser ? (`${tgUser.first_name || ''} ${tgUser.last_name || ''}`.trim() || fullName.trim()) : fullName.trim(),
+          username: tgUser?.username ?? null,
           email: normalizedEmail,
-          web_registered: true,
+          photo_url: tgUser?.photo_url ?? null,
+          web_registered: tgUser ? false : true,
           referrer_id: normalizedRefId,
           balance: bonus || 0,
           luck: 'default',
@@ -243,15 +244,6 @@ export function WebAuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      if (requiresEmailConfirmation) {
-        try {
-          sessionStorage.setItem(PENDING_FLAG_KEY, '1');
-          sessionStorage.setItem(PENDING_EMAIL_KEY, normalizedEmail);
-          sessionStorage.setItem(PENDING_PASS_KEY, password);
-        } catch {}
-        return { ok: true, requiresEmailConfirmation: true };
-      }
-
       if (createdUserId) {
         setWebUserId(createdUserId);
         localStorage.setItem(STORAGE_KEY, String(createdUserId));
@@ -259,7 +251,8 @@ export function WebAuthProvider({ children }: { children: React.ReactNode }) {
         return { ok: true };
       }
 
-      return { ok: false, error: 'Ошибка регистрации' };
+      // Если не удалось создать запись в users за 20 попыток — фатально
+      return { ok: false, error: 'Ошибка создания аккаунта. Попробуйте позже или обратитесь в поддержку.' };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Ошибка регистрации';
       return { ok: false, error: msg };

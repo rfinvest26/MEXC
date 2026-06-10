@@ -51,29 +51,28 @@ export async function fetchFinnhubQuote(symbol: string): Promise<FinnhubQuoteJso
 
 export function finnhubQuoteToRubRow(
   q: FinnhubQuoteJson | null,
-  rubPerUsd: number | null
+  _perUsd: number | null
 ): { price: number; change24h: number; unavailable: boolean } {
   const usd = Number(q?.c);
-  const rub = rubPerUsd && rubPerUsd > 0 && Number.isFinite(usd) && usd > 0 ? usd * rubPerUsd : 0;
   const dp = Number(q?.dp);
   const change24h = Number.isFinite(dp) ? dp : 0;
   return {
-    price: rub,
+    price: Number.isFinite(usd) && usd > 0 ? usd : 0,
     change24h,
-    unavailable: !(rub > 0),
+    unavailable: !(usd > 0),
   };
 }
 
-export async function fetchFinnhubQuoteInRub(
+export async function fetchFinnhubQuoteInUsd(
   symbol: string,
-  rubPerUsd: number | null
+  perUsd: number | null
 ): Promise<{ price: number; change24h: number; unavailable: boolean }> {
   const q = await fetchFinnhubQuote(symbol);
-  return finnhubQuoteToRubRow(q, rubPerUsd);
+  return finnhubQuoteToRubRow(q, perUsd);
 }
 
 /** Rub/USD для конвертации: сначала курс из market_quotes, иначе из кеша приложения. */
-export function resolveRubPerUsd(fallbackFromRates?: number | null): number | null {
+export function resolveUsdRate(fallbackFromRates?: number | null): number | null {
   const x = Number(fallbackFromRates);
   if (Number.isFinite(x) && x > 55 && x < 220) return x;
   return getMarketUsdToRub();

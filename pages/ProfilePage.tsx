@@ -12,6 +12,7 @@ import { checkPin, setPin } from '../utils/pinStorage';
 import PinKeypad from '../components/PinKeypad';
 import { useToast } from '../context/ToastContext';
 import { useWebAuth } from '../context/WebAuthContext';
+import UserAvatar from '../components/UserAvatar';
 
 interface ProfilePageProps {
   deals: Deal[];
@@ -68,10 +69,13 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
   const total = wins + losses;
   const winRate = total > 0 ? Math.round((wins / total) * 100) : 0;
 
+  const tgUser = typeof window !== 'undefined' ? (window as any).Telegram?.WebApp?.initDataUnsafe?.user : null;
   const isWebUser = !!(user?.web_registered || (user?.email && !tgid));
-  const displayName = user?.full_name || user?.username || (user?.email && isWebUser ? user.email : (user ? t('user_placeholder') : t('guest')));
+  const displayName = tgUser?.first_name
+    ? `${tgUser.first_name} ${tgUser.last_name || ''}`.trim()
+    : user?.full_name || user?.username || (user?.email && isWebUser ? user.email : (user ? t('user_placeholder') : t('guest')));
   const displayId = user ? `#${user.user_id}` : '—';
-  const avatarUrl = isWebUser ? undefined : (user?.photo_url || undefined);
+  const avatarUrl = tgUser?.photo_url || user?.photo_url || undefined;
   const isGuest = !user;
 
   return (
@@ -82,10 +86,10 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
           <button
             type="button"
             onClick={() => { Haptic.tap(); onBack(); }}
-            className="touch-target h-10 w-10 rounded-2xl bg-black/30 border border-white/5 flex items-center justify-center text-textSecondary active:scale-[0.98] transition-transform"
+            className="touch-target h-10 w-10 rounded-xl flex items-center justify-center text-textSecondary hover:text-textPrimary hover:bg-white/5 active:scale-95 transition-all focus:outline-none"
             aria-label={t('close_aria')}
           >
-            <X size={18} />
+            <X size={20} strokeWidth={1.75} />
           </button>
           <div className="flex-1" />
         </div>
@@ -94,17 +98,24 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
       <div className="flex-1 overflow-y-auto no-scrollbar px-4 pb-24 pt-2 lg:px-6 lg:pt-4">
         {/* Centered profile block */}
         <div className="flex flex-col items-center text-center pt-2 pb-4">
-          {!isWebUser && (
-            <div className="relative">
-              {avatarUrl ? (
-                <img src={avatarUrl} alt="" className="w-20 h-20 rounded-full object-cover bg-white/5 border border-white/10" />
-              ) : (
-                <div className="w-20 h-20 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-textPrimary text-2xl font-bold">
-                  {(displayName || '?').charAt(0).toUpperCase()}
-                </div>
-              )}
-            </div>
-          )}
+          <div className="relative inline-block">
+            <UserAvatar
+              name={displayName}
+              photoUrl={avatarUrl}
+              className="w-20 h-20"
+              imageClassName="bg-white/5 border-white/10"
+              fallbackClassName="bg-white/5 border-white/10 text-textPrimary text-2xl font-bold"
+              iconClassName="text-textPrimary"
+              iconSize={22}
+            />
+            {!!tgid && (
+              <div className="absolute bottom-0 right-0 bg-[#0088cc] rounded-full p-1 border-2 border-background">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="white">
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/>
+                </svg>
+              </div>
+            )}
+          </div>
           <div className="mt-3">
             <div className="text-[22px] font-bold text-textPrimary tracking-tight">
               {displayName}
@@ -140,7 +151,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
             {user?.is_kyc !== true && onNavigateToKyc && (
               <button
                 onClick={() => { Haptic.tap(); onNavigateToKyc(); }}
-                className="mt-3 w-full h-11 bg-neon text-black text-sm font-bold rounded-2xl flex items-center justify-center gap-2 active:scale-[0.99] transition-transform"
+                className="mt-3 w-full h-11 bg-neon text-black text-sm font-bold rounded-full flex items-center justify-center gap-2 active:scale-95 transition-transform"
               >
                 <ShieldCheck size={14} />
                 {t('verify_btn')}
@@ -155,17 +166,17 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
 
         {/* Stats (glass cards) */}
         <div className="grid grid-cols-3 gap-2 mb-6">
-          <div className="bg-white/5 border border-white/5 rounded-3xl px-3 py-3 text-center">
+          <div className="bg-[#0a0d14] border border-[#131722] rounded-2xl px-3 py-3 text-center">
             <Trophy size={14} className="text-up mx-auto mb-1" />
             <span className="text-sm font-bold text-white tabular-nums">{wins}</span>
             <p className="text-xs text-neutral-500 uppercase tracking-wider mt-0.5">{t('wins')}</p>
           </div>
-          <div className="bg-white/5 border border-white/5 rounded-3xl px-3 py-3 text-center">
+          <div className="bg-[#0a0d14] border border-[#131722] rounded-2xl px-3 py-3 text-center">
             <XCircle size={14} className="text-red-500/80 mx-auto mb-1" />
             <span className="text-sm font-bold text-white tabular-nums">{losses}</span>
             <p className="text-xs text-neutral-500 uppercase tracking-wider mt-0.5">{t('losses')}</p>
           </div>
-          <div className="bg-white/5 border border-white/5 rounded-3xl px-3 py-3 text-center">
+          <div className="bg-[#0a0d14] border border-[#131722] rounded-2xl px-3 py-3 text-center">
             <BarChart3 size={14} className="text-neon/80 mx-auto mb-1" />
             <span className="text-sm font-bold text-white tabular-nums">{winRate}%</span>
             <p className="text-xs text-neutral-500 uppercase tracking-wider mt-0.5">{t('winrate')}</p>
@@ -174,12 +185,12 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
 
         {/* Menu groups (keep same buttons, only style) */}
         <div className="space-y-4">
-          <div className="nav-glass rounded-3xl overflow-hidden">
+          <div className="bg-card border border-border rounded-2xl overflow-hidden">
           {onNavigateToLanguage && (
             <button
               type="button"
               onClick={() => { Haptic.tap(); onNavigateToLanguage(); }}
-              className="w-full px-4 py-4 flex items-center justify-between group text-left active:scale-[0.99] transition-transform"
+              className="w-full px-4 py-4 flex items-center justify-between group text-left active:scale-95 transition-all"
             >
               <div className="flex items-center gap-2.5">
                 <Languages size={18} className="text-textSecondary" />
@@ -193,26 +204,10 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
               </div>
             </button>
           )}
-          {onNavigateToCurrency && (
-            <button
-              type="button"
-              onClick={() => { Haptic.tap(); onNavigateToCurrency(); }}
-              className="w-full px-4 py-4 flex items-center justify-between group text-left active:scale-[0.99] transition-transform hairline-top"
-            >
-              <div className="flex items-center gap-2.5">
-                <DollarSign size={18} className="text-textSecondary" />
-                <span className="text-sm font-medium text-textPrimary">{t('currency')}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-[12px] text-textSubtle font-mono">{currencyCode}</span>
-                <ChevronRight size={16} className="text-textSubtle" />
-              </div>
-            </button>
-          )}
           <button
             type="button"
             onClick={() => { Haptic.tap(); setShowLegalModal(true); }}
-            className="w-full px-4 py-4 flex items-center justify-between group text-left active:scale-[0.99] transition-transform hairline-top"
+            className="w-full px-4 py-4 flex items-center justify-between group text-left active:scale-95 transition-all border-t border-border"
           >
             <div className="flex items-center gap-2.5">
               <FileText size={18} className="text-textSecondary" />
@@ -222,7 +217,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
           </button>
           </div>
 
-          <div className="nav-glass rounded-3xl overflow-hidden">
+          <div className="bg-card border border-border rounded-2xl overflow-hidden">
           {!isGuest && tgid && hasPin(tgid) && (
             <button
               type="button"
@@ -234,7 +229,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                 setRepeatPinValue('');
                 setPinError('');
               }}
-              className="w-full px-4 py-4 flex items-center justify-between group text-left active:scale-[0.99] transition-transform"
+              className="w-full px-4 py-4 flex items-center justify-between group text-left active:scale-95 transition-all"
             >
               <div className="flex items-center gap-2.5">
                 <KeyRound size={18} className="text-textSecondary" />
@@ -254,7 +249,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                 setRepeatPinValue('');
                 setPinError('');
               }}
-              className="w-full px-4 py-4 flex items-center justify-between group text-left active:scale-[0.99] transition-transform"
+              className="w-full px-4 py-4 flex items-center justify-between group text-left active:scale-95 transition-all"
             >
               <div className="flex items-center gap-2.5">
                 <KeyRound size={18} className="text-textSecondary" />
@@ -273,7 +268,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                 window.open(supportLink, '_blank', 'noopener,noreferrer');
               }
             }}
-            className={`w-full px-4 py-4 flex items-center justify-between group text-left active:scale-[0.99] transition-transform ${(!isGuest && ((tgid && hasPin(tgid)) || (webUserId && hasPin(webUserId.toString())))) ? 'hairline-top' : ''}`}
+            className={`w-full px-4 py-4 flex items-center justify-between group text-left active:scale-95 transition-all ${(!isGuest && ((tgid && hasPin(tgid)) || (webUserId && hasPin(webUserId.toString())))) ? 'border-t border-border' : ''}`}
           >
             <div className="flex items-center gap-2.5">
               <HelpCircle size={18} className="text-textSecondary" />
@@ -285,7 +280,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
             <button
               type="button"
               onClick={() => { Haptic.tap(); logout(); window.location.href = '/'; }}
-              className="w-full px-4 py-4 flex items-center justify-between group text-left active:scale-[0.99] transition-transform hairline-top"
+              className="w-full px-4 py-4 flex items-center justify-between group text-left active:scale-95 transition-all border-t border-border"
             >
               <div className="flex items-center gap-2.5">
                 <LogOut size={18} className="text-textSecondary group-hover:text-red-400" />

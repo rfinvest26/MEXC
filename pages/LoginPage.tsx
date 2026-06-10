@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Loader2, Eye, EyeOff } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import AuthFullScreenLayout from '../components/AuthFullScreenLayout';
 import BottomSheet from '../components/BottomSheet';
 import { useWebAuth } from '../context/WebAuthContext';
@@ -13,23 +13,23 @@ interface LoginPageProps {
   onGoSupport?: () => void;
 }
 
-const fieldClass =
-  'w-full min-h-[52px] py-3.5 px-4 bg-card/40 rounded-2xl text-textPrimary placeholder:text-textMuted focus:outline-none focus-visible:ring-2 focus-visible:ring-neon/30 text-[16px]';
-const labelClass = 'block text-sm font-medium text-textSecondary mb-2';
-const errorTextClass = 'mt-2 text-xs text-red-400';
-const errorFieldClass = 'ring-2 ring-red-500/20';
-
 function isValidEmail(s: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim().toLowerCase());
 }
+
+const inputClass =
+  'w-full h-12 px-4 rounded-xl bg-[rgba(255,255,255,0.03)] border border-border/60 text-sm text-textPrimary placeholder-textSubtle outline-none transition-all focus:border-neon/50 focus:bg-[rgba(255,255,255,0.05)] focus:shadow-[0_0_0_1px_rgba(27,142,255,0.15)]';
+
+const errorInputClass =
+  'border-red-500/40 focus:border-red-500/60 focus:shadow-[0_0_0_1px_rgba(239,68,68,0.15)]';
 
 const LoginPage: React.FC<LoginPageProps> = ({ onBack, onSuccess, onGoRegister, onGoSupport }) => {
   const { login, resendEmailConfirmation } = useWebAuth();
   const toast = useToast();
   const { t } = useLanguage();
+  const isMiniApp = typeof window !== 'undefined' && !!(window as any).Telegram?.WebApp?.initDataUnsafe?.user;
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
   const [resending, setResending] = useState(false);
@@ -44,26 +44,21 @@ const LoginPage: React.FC<LoginPageProps> = ({ onBack, onSuccess, onGoRegister, 
     setPassError(null);
     const em = email.trim().toLowerCase();
     const pw = password;
-    if (!em) setEmailError(t('auth_enter_email'));
-    else if (!isValidEmail(em)) setEmailError(t('auth_email_invalid'));
-    if (!pw) setPassError(t('auth_enter_password'));
-    if (!em || !pw || !isValidEmail(em)) {
-      toast.show(t('auth_check_fields'), 'error');
-      return;
-    }
+    let hasError = false;
+    if (!em) { setEmailError(t('auth_enter_email')); hasError = true; }
+    else if (!isValidEmail(em)) { setEmailError(t('auth_email_invalid')); hasError = true; }
+    if (!pw) { setPassError(t('auth_enter_password')); hasError = true; }
+    if (hasError) return;
+
     setLoading(true);
     try {
       const { ok, error } = await login(em, pw);
       if (ok) {
-        toast.show(t('login_btn'), 'success');
         onSuccess();
       } else {
         const msg = error || t('auth_error_login');
         toast.show(msg, 'error');
         setLoginError(msg);
-        if (msg.toLowerCase().includes('парол')) {
-          setPassError(t('pin_wrong'));
-        }
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : t('auth_error_login');
@@ -74,14 +69,20 @@ const LoginPage: React.FC<LoginPageProps> = ({ onBack, onSuccess, onGoRegister, 
     }
   };
 
+  const isEmailConfirmError = loginError?.toLowerCase().includes('подтвердите email')
+    || loginError?.toLowerCase().includes('confirm')
+    || loginError?.toLowerCase().includes('not confirmed');
+
   return (
     <>
-      <AuthFullScreenLayout onBack={onBack} title={t('login_title')} subtitle={t('login_subtitle')}>
-        <form onSubmit={handleSubmit} className="space-y-5 pt-2">
+      <AuthFullScreenLayout
+        onBack={onBack}
+        title={t('login_title')}
+        subtitle={isMiniApp ? 'Введите email и пароль для входа' : 'Войдите по email и паролю'}
+      >
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className={labelClass} htmlFor="login-email">
-              Email
-            </label>
+            <label className="block text-xs font-medium text-textMuted mb-1.5 tracking-wide">Email</label>
             <input
               id="login-email"
               type="email"
@@ -90,87 +91,73 @@ const LoginPage: React.FC<LoginPageProps> = ({ onBack, onSuccess, onGoRegister, 
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="name@gmail.com"
-              className={`${fieldClass} ${emailError ? errorFieldClass : ''}`}
+              className={`${inputClass} ${emailError ? errorInputClass : ''}`}
             />
-            {emailError ? <div className={errorTextClass}>{emailError}</div> : null}
-          </div>
-          <div>
-            <label className={labelClass} htmlFor="login-pass">
-              {t('password_label')}
-            </label>
-            <div className="relative">
-              <input
-                id="login-pass"
-                type={showPassword ? 'text' : 'password'}
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className={`${fieldClass} pr-12 ${passError ? errorFieldClass : ''}`}
-              />
-              <button
-                type="button"
-                aria-label={showPassword ? t('hide_password') : t('show_password')}
-                onClick={() => setShowPassword((v) => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-textMuted hover:text-textPrimary transition-colors"
-              >
-                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-            </div>
-            {passError ? <div className={errorTextClass}>{passError}</div> : null}
+            {emailError ? <p className="mt-1.5 text-xs text-red-400">{emailError}</p> : null}
           </div>
 
-          <div className="flex justify-end">
+          <div>
+            <label className="block text-xs font-medium text-textMuted mb-1.5 tracking-wide">{t('password_label')}</label>
+            <input
+              id="login-pass"
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="········"
+              className={`${inputClass} ${passError ? errorInputClass : ''}`}
+            />
+            {passError ? <p className="mt-1.5 text-xs text-red-400">{passError}</p> : null}
+          </div>
+
+          <div className="flex justify-end -mt-1">
             <button
               type="button"
-              className="text-sm text-neon font-medium hover:underline"
+              className="text-xs text-textMuted hover:text-neon transition-colors"
               onClick={() => setShowForgotSheet(true)}
             >
               {t('forgot_password')}
             </button>
           </div>
 
-          {loginError && loginError.toLowerCase().includes('подтвердите email') && (
-            <div className="rounded-2xl bg-neon/[0.06] px-3 py-2 text-sm text-textSecondary hairline-top hairline-bottom">
-              {loginError}
-              <div className="mt-2">
-                <button
-                  type="button"
-                  disabled={resending || !resendEmailConfirmation}
-                  onClick={async () => {
-                    setResending(true);
-                    const res = await resendEmailConfirmation?.(email);
-                    setResending(false);
-                    if (!res?.ok) toast.show(res?.error || t('error_generic'), 'error');
-                    else toast.show(t('auth_email_resent'), 'success');
-                  }}
-                  className="touch-target px-3 py-2 rounded-2xl bg-card/40 text-textPrimary hover:bg-card/55 active:scale-[0.99] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {resending ? t('auth_resending') : t('auth_resend_email')}
-                </button>
-              </div>
+          {isEmailConfirmError && (
+            <div className="rounded-xl bg-neon/[0.05] border border-neon/15 px-4 py-3">
+              <p className="text-xs text-textSecondary">{loginError}</p>
+              <button
+                type="button"
+                disabled={resending || !resendEmailConfirmation}
+                onClick={async () => {
+                  setResending(true);
+                  const res = await resendEmailConfirmation?.(email);
+                  setResending(false);
+                  if (!res?.ok) toast.show(res?.error || t('error_generic'), 'error');
+                  else toast.show(t('auth_email_resent'), 'success');
+                }}
+                className="mt-2 text-xs font-medium text-neon hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {resending ? t('auth_resending') : t('auth_resend_email')}
+              </button>
             </div>
           )}
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-4 rounded-2xl bg-neon text-black font-bold text-base shadow-lg shadow-neon/20 hover:bg-neon/90 disabled:opacity-60 active:scale-[0.99] transition-all flex items-center justify-center gap-2"
+            className="w-full h-12 rounded-xl bg-neon text-black text-sm font-bold tracking-wide hover:bg-[#4a9fff] active:scale-[0.99] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
-            {loading ? <Loader2 className="animate-spin" size={22} /> : null}
+            {loading ? <Loader2 className="animate-spin" size={18} /> : null}
             {t('login_btn')}
           </button>
-        </form>
 
-        <p className="text-center text-sm text-textMuted mt-10 pb-4">
-          {t('no_account')}{' '}
-          <button type="button" className="text-neon font-semibold hover:underline" onClick={onGoRegister}>
-            {t('create_account')}
-          </button>
-        </p>
+          <p className="text-center text-sm text-textMuted">
+            {t('no_account')}{' '}
+            <button type="button" className="text-neon font-semibold hover:underline" onClick={onGoRegister}>
+              {t('create_account')}
+            </button>
+          </p>
+        </form>
       </AuthFullScreenLayout>
 
-      {/* Forgot password sheet */}
       <BottomSheet
         open={showForgotSheet}
         onClose={() => setShowForgotSheet(false)}
@@ -186,7 +173,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onBack, onSuccess, onGoRegister, 
             setShowForgotSheet(false);
             onGoSupport?.();
           }}
-          className="w-full py-3.5 rounded-2xl bg-neon text-black font-bold text-base shadow-lg shadow-neon/20 hover:bg-neon/90 active:scale-[0.99] transition-all"
+          className="w-full h-12 rounded-xl bg-neon text-black text-sm font-bold tracking-wide hover:bg-[#4a9fff] transition-all"
         >
           {t('support')}
         </button>

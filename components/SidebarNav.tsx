@@ -8,6 +8,7 @@ import { useWebAuth } from '../context/WebAuthContext';
 import Skeleton from './Skeleton';
 import { NavHomeIcon, NavMarketsIcon, NavTradeIcon, NavWalletIcon } from './icons/MexcNavIcons';
 import UnifiedMarketsRibbon from './UnifiedMarketsRibbon';
+import UserAvatar from './UserAvatar';
 
 interface SidebarNavProps {
   currentPage: PageView;
@@ -53,9 +54,15 @@ const SidebarNav: React.FC<SidebarNavProps> = ({ currentPage, onNavigate }) => {
         {user ? (
           <div className="px-3 pb-4 mb-2 border-b border-border/40">
             <div className="flex items-center gap-2.5 mb-3">
-              <div className="w-8 h-8 rounded-full bg-card border border-border flex items-center justify-center text-neon text-sm font-semibold shrink-0">
-                {(displayName || '?').charAt(0).toUpperCase()}
-              </div>
+              <UserAvatar
+                name={displayName}
+                photoUrl={user.photo_url}
+                className="w-8 h-8"
+                imageClassName="border-border"
+                fallbackClassName="bg-card border-border text-neon text-sm"
+                iconClassName="text-neon"
+                iconSize={12}
+              />
               <div className="min-w-0">
                 <p className="text-xs font-semibold text-textPrimary truncate">{displayName}</p>
                 {user.email && isWebUser && (
@@ -100,7 +107,7 @@ const SidebarNav: React.FC<SidebarNavProps> = ({ currentPage, onNavigate }) => {
             return (
               <button
                 key={item.id}
-                onClick={() => { Haptic.tap(); onNavigate(item.id); }}
+                onClick={() => { Haptic.medium(); onNavigate(item.id); }}
                 title={item.label}
                 className={`cursor-pointer flex items-center gap-3 px-3 py-2.5 rounded-2xl text-left transition-colors duration-150 ${
                   isActive
@@ -109,11 +116,11 @@ const SidebarNav: React.FC<SidebarNavProps> = ({ currentPage, onNavigate }) => {
                 }`}
                 aria-current={isActive ? 'page' : undefined}
               >
-                <div className={isActive ? 'nav-icon-pill nav-active-pop rounded-2xl h-9 w-11 flex items-center justify-center text-neon' : 'rounded-2xl h-9 w-11 flex items-center justify-center text-textMuted'}>
+                <div className={isActive ? 'nav-icon-pill nav-active-pop rounded-2xl h-9 w-11 flex items-center justify-center text-accent' : 'rounded-2xl h-9 w-11 flex items-center justify-center text-textMuted'}>
                   {isMexcSvg ? (
                     <Icon active={isActive} className={isActive ? 'icon-soft' : 'icon-muted'} size={20} />
                   ) : (
-                    <Icon size={18} strokeWidth={1.9} className={isActive ? 'text-neon' : 'text-textMuted'} />
+                    <Icon size={18} strokeWidth={1.5} className={isActive ? 'text-accent' : 'text-textMuted'} />
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
@@ -130,20 +137,20 @@ const SidebarNav: React.FC<SidebarNavProps> = ({ currentPage, onNavigate }) => {
           <button
             type="button"
             title={t('support')}
-            onClick={() => { Haptic.tap(); onNavigate('SUPPORT'); }}
+            onClick={() => { Haptic.medium(); onNavigate('SUPPORT'); }}
             className="cursor-pointer flex items-center gap-3 px-4 py-3 rounded-xl text-left text-textSecondary hover:text-textPrimary hover:bg-white/[0.06] transition-colors duration-150"
           >
-            <MessageCircle size={20} strokeWidth={2} />
+            <MessageCircle size={20} strokeWidth={1.5} />
             <span className="font-medium text-sm tracking-tight">{t('support')}</span>
           </button>
           {isWebUser && webUserId && (
             <button
               type="button"
               title={t('exit') || 'Выйти'}
-              onClick={() => { Haptic.tap(); logout(); window.location.href = '/'; }}
+              onClick={() => { Haptic.medium(); logout(); window.location.href = '/'; }}
               className="cursor-pointer flex items-center gap-3 px-4 py-3 rounded-xl text-left text-textSecondary hover:text-red-400 hover:bg-red-500/[0.06] transition-colors duration-150"
             >
-              <LogOut size={20} strokeWidth={2} />
+              <LogOut size={20} strokeWidth={1.5} />
               <span className="font-medium text-sm tracking-tight">{t('exit') || 'Выйти'}</span>
             </button>
           )}

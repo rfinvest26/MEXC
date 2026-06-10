@@ -65,9 +65,15 @@ const Layout: React.FC<LayoutProps> = ({ children, currentPage, onNavigate, hide
         const currency = stored.currency || 'RUB';
         const paymentDeadline = Number(stored.paymentDeadline);
         const waitDeadline = Number(stored.waitDeadline);
+        const now = Date.now();
+
         if (stored.status === 'awaiting_payment' && Number.isFinite(paymentDeadline) && paymentDeadline > 0) {
-          const now = Date.now();
           const left = Math.max(0, Math.floor((paymentDeadline - now) / 1000));
+          if (left <= 0) {
+            window.localStorage.removeItem(STORAGE_KEY);
+            setP2pSummary(null);
+            return;
+          }
           setP2pSummary({
             amount,
             currency,
@@ -75,8 +81,12 @@ const Layout: React.FC<LayoutProps> = ({ children, currentPage, onNavigate, hide
             timeLeft: left,
           });
         } else {
-          const now = Date.now();
           const left = Number.isFinite(waitDeadline) && waitDeadline > 0 ? Math.max(0, Math.floor((waitDeadline - now) / 1000)) : undefined;
+          if (left !== undefined && left <= 0) {
+            window.localStorage.removeItem(STORAGE_KEY);
+            setP2pSummary(null);
+            return;
+          }
           setP2pSummary({
             amount,
             currency,
@@ -147,7 +157,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentPage, onNavigate, hide
                 Haptic.tap();
                 onNavigate('DEPOSIT');
               }}
-              className="mx-3 mb-2 mt-1 w-auto rounded-2xl px-3 py-2 flex flex-col gap-1.5 text-left p2p-banner"
+              className="mx-3 mb-2 mt-1 w-auto rounded-2xl px-3 py-2 flex flex-col gap-1.5 text-left p2p-banner border border-neon/20"
             >
               {/* Status row */}
               <div className="flex items-center gap-2">
@@ -181,7 +191,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentPage, onNavigate, hide
             </button>
           )}
           <div
-            className="nav-glass border-t border-white/[0.06] shadow-[0_-12px_44px_rgba(0,0,0,0.65)]"
+            className="nav-glass border-t border-white/[0.08] shadow-[0_-16px_52px_rgba(0,0,0,0.68)]"
             style={{
               paddingBottom: 'env(safe-area-inset-bottom, 0px)',
             }}
