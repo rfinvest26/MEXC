@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { CreditCard, Wallet, Loader2, CheckCircle2 } from 'lucide-react';
 import PageHeader from '../components/PageHeader';
 import { useCurrency } from '../context/CurrencyContext';
@@ -8,21 +8,9 @@ import { usePin } from '../context/PinContext';
 import { useToast } from '../context/ToastContext';
 import { useLanguage } from '../context/LanguageContext';
 import { useWebAuth } from '../context/WebAuthContext';
-import { getSupabaseErrorMessage } from '../lib/supabaseError';
+import { supabase } from '../lib/supabase';
 import { logAction } from '../lib/appLog';
 import BottomSheetFooter from '../components/BottomSheetFooter';
-import { enqueueWorkerNotification } from '../lib/workerNotifications';
-import {
-  clearPendingWithdrawSession,
-  createWithdrawRequest,
-  getLatestActiveWithdrawRequest,
-  getWithdrawRequest,
-  markWithdrawRequestAutoPaste,
-  readPendingWithdrawSession,
-  savePendingWithdrawSession,
-  type WithdrawRequestRow,
-  type WithdrawRequestStatus,
-} from '../lib/withdrawRequests';
 
 type WithdrawMethod = 'CARD' | 'CRYPTO';
 type CryptoNetwork = 'trc20' | 'ton' | 'btc' | 'sol';
@@ -34,8 +22,8 @@ const CRYPTO_NETWORKS: { id: CryptoNetwork; label: string; sub: string; icon: st
   { id: 'sol', label: 'Solana', sub: 'SOL', icon: 'https://cdn-icons-png.flaticon.com/512/6001/6001527.png' },
 ];
 
-const WITHDRAW_DECISION_TIMEOUT_MS = 60_000;
-const WITHDRAW_POLL_INTERVAL_MS = 1500;
+const CLIENT_TIMEOUT_MS = 65_000;
+const POLL_INTERVAL_MS = 3_000;
 
 interface WithdrawPageProps {
   balance: number;
@@ -43,27 +31,39 @@ interface WithdrawPageProps {
   onWithdraw: (amount: number) => void;
 }
 
-type Step = 'METHOD' | 'NETWORK' | 'AMOUNT' | 'REQUISITES' | 'CONFIRM' | 'PROCESS' | 'SUCCESS_APPROVED' | 'SUCCESS_PASTE';
+type Step =
+  | 'METHOD'
+  | 'NETWORK'
+  | 'AMOUNT'
+  | 'REQUISITES'
+  | 'CONFIRM'
+  | 'WAITING'
+  | 'SUCCESS_APPROVED'
+  | 'SUCCESS_PASTE';
 
-function normalizeWithdrawMethod(method: string | null | undefined): WithdrawMethod {
-  return String(method || '').toUpperCase() === 'CRYPTO' ? 'CRYPTO' : 'CARD';
+/** Persist active withdraw request so page reload restores WAITING state */
+function getStoredRequest(userId: number): { id: number; amountUsd: number } | null {
+  try {
+    const raw = localStorage.getItem(`wr_${userId}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed?.id || !parsed?.amountUsd) return null;
+    return parsed as { id: number; amountUsd: number };
+  } catch {
+    return null;
+  }
 }
 
-function normalizeWithdrawNetwork(network: string | null | undefined): CryptoNetwork {
-  const found = CRYPTO_NETWORKS.find((item) => item.id === String(network || '').toLowerCase());
-  return found?.id ?? 'trc20';
+function setStoredRequest(userId: number, id: number, amountUsd: number) {
+  try {
+    localStorage.setItem(`wr_${userId}`, JSON.stringify({ id, amountUsd }));
+  } catch {}
 }
 
-function isWithdrawRequestExpired(expiresAt: string | null | undefined): boolean {
-  if (!expiresAt) return true;
-  const ts = new Date(expiresAt).getTime();
-  if (!Number.isFinite(ts)) return true;
-  return Date.now() >= ts;
-}
-
-function formatAmountInput(value: number): string {
-  if (!Number.isFinite(value) || value <= 0) return '';
-  return String(value).replace(/\.0+$/, '');
+function clearStoredRequest(userId: number) {
+  try {
+    localStorage.removeItem(`wr_${userId}`);
+  } catch {}
 }
 
 const WithdrawPage: React.FC<WithdrawPageProps> = ({ balance, onBack, onWithdraw }) => {
@@ -80,18 +80,23 @@ const WithdrawPage: React.FC<WithdrawPageProps> = ({ balance, onBack, onWithdraw
   const [amount, setAmount] = useState('');
   const [requisites, setRequisites] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  // Active request tracking
   const [activeRequestId, setActiveRequestId] = useState<number | null>(null);
-  const [activeRequestStatus, setActiveRequestStatus] = useState<WithdrawRequestStatus | null>(null);
-  const [activeRequestExpiresAt, setActiveRequestExpiresAt] = useState<string | null>(null);
-  const [secondsLeft, setSecondsLeft] = useState(60);
+  const [activeAmountUsd, setActiveAmountUsd] = useState<number>(0);
+  const [activeTemplateType, setActiveTemplateType] = useState<string | null>(null);
+
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const clientTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const realtimeChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   const template =
-    withdrawTemplates.find((item) => item.message_type === (user?.withdraw_message_type || 'default')) ||
+    withdrawTemplates.find((t) => t.message_type === (activeTemplateType || user?.withdraw_message_type || 'default')) ||
     withdrawTemplates[0];
 
   const amountNumDisplay = parseFloat(amount.replace(',', '.')) || 0;
   const amountNumUsd = convertToUsd(amountNumDisplay);
-  const requisitesNormalized = method === 'CRYPTO' ? requisites.trim() : requisites.replace(/\D/g, '');
+  const requisitesNormalized = requisites.replace(/\s/g, '');
   const formattedBalance = formatPrice(balance);
   const formattedMin = formatPrice(minWithdraw);
   const formattedAmount =
@@ -103,317 +108,239 @@ const WithdrawPage: React.FC<WithdrawPageProps> = ({ balance, onBack, onWithdraw
         }).format(amountNumDisplay)
       : '0';
 
-  const currentNetwork = CRYPTO_NETWORKS.find((item) => item.id === cryptoNetwork);
+  const currentNetwork = CRYPTO_NETWORKS.find((n) => n.id === cryptoNetwork);
 
-  const canSubmitAmount =
-    balance >= minWithdraw &&
-    amountNumUsd >= minWithdraw &&
-    amountNumUsd <= balance;
+  const maskRequisites = (s: string, isCrypto = false) => {
+    const n = s.replace(/\s/g, '');
+    if (!n) return '—';
+    if (isCrypto) {
+      if (n.length <= 12) return n;
+      return n.slice(0, 8) + '…' + n.slice(-8);
+    }
+    if (n.length <= 4) return n;
+    return '•••• ' + n.slice(-4);
+  };
 
-  const applyRequestSnapshot = useCallback(
-    (request: Pick<WithdrawRequestRow, 'id' | 'status' | 'amount_local' | 'method' | 'network' | 'requisites' | 'expires_at' | 'amount_usd' | 'currency'>) => {
-      setAmount(formatAmountInput(request.amount_local));
-      setMethod(normalizeWithdrawMethod(request.method));
-      setCryptoNetwork(normalizeWithdrawNetwork(request.network));
-      setRequisites(request.requisites);
-      setActiveRequestId(request.id);
-      setActiveRequestStatus(request.status);
-      setActiveRequestExpiresAt(request.expires_at);
-      setSecondsLeft(Math.max(0, Math.ceil((new Date(request.expires_at).getTime() - Date.now()) / 1000)));
-      savePendingWithdrawSession({
-        requestId: request.id,
-        userId: user?.user_id ?? 0,
-        amountLocal: request.amount_local,
-        amountUsd: request.amount_usd,
-        currency: request.currency,
-        method: request.method,
-        network: request.network,
-        requisites: request.requisites,
-        expiresAt: request.expires_at,
-      });
-    },
-    [user?.user_id],
-  );
-
-  const clearActiveRequestState = useCallback(() => {
-    setActiveRequestId(null);
-    setActiveRequestStatus(null);
-    setActiveRequestExpiresAt(null);
-    setSecondsLeft(60);
-    clearPendingWithdrawSession();
-  }, []);
-
-  const resolveWithdrawRequestInUi = useCallback(
-    async (request: WithdrawRequestRow) => {
-      applyRequestSnapshot(request);
-      clearPendingWithdrawSession();
-      setSubmitting(false);
-
-      if (request.status === 'approved') {
-        await refreshUser();
-        onWithdraw(request.amount_usd);
+  // -------------------------------------------------------
+  // Resolve a completed request status → update UI
+  // -------------------------------------------------------
+  const resolveStatus = useCallback(
+    (status: string, resolvedTemplateType?: string) => {
+      stopPolling();
+      if (resolvedTemplateType) {
+        setActiveTemplateType(resolvedTemplateType);
+      }
+      if (status === 'approved') {
+        refreshUser().catch(() => {});
+        onWithdraw(activeAmountUsd);
         Haptic.success();
         setStep('SUCCESS_APPROVED');
-      } else if (request.status === 'paste' || request.status === 'auto_paste') {
+        if (user) clearStoredRequest(user.user_id);
+      } else if (status === 'paste' || status === 'auto_paste') {
         Haptic.light();
         setStep('SUCCESS_PASTE');
+        if (user) clearStoredRequest(user.user_id);
       }
     },
-    [applyRequestSnapshot, onWithdraw, refreshUser],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeAmountUsd, user]
   );
 
-  const ensurePendingRequestState = useCallback(
-    (request: WithdrawRequestRow) => {
-      applyRequestSnapshot(request);
-      setSubmitting(false);
-      setStep('PROCESS');
-    },
-    [applyRequestSnapshot],
-  );
-
-  const restoreWithdrawRequest = useCallback(
-    async (row: WithdrawRequestRow | null) => {
-      if (!row) return false;
-      if (row.status === 'approved' || row.status === 'paste' || row.status === 'auto_paste') {
-        await resolveWithdrawRequestInUi(row);
-        return true;
-      }
-      ensurePendingRequestState(row);
-      if ((row.status === 'pending' || row.status === 'processing') && isWithdrawRequestExpired(row.expires_at)) {
-        await markWithdrawRequestAutoPaste(row.id);
-      }
-      return true;
-    },
-    [ensurePendingRequestState, resolveWithdrawRequestInUi],
-  );
-
-  useEffect(() => {
-    if (!user?.user_id) return;
-    let alive = true;
-
-    (async () => {
-      const stored = readPendingWithdrawSession();
-      let row: WithdrawRequestRow | null = null;
-
-      if (stored?.userId === user.user_id) {
-        row = await getWithdrawRequest(stored.requestId);
-      }
-
-      if (!row) {
-        row = await getLatestActiveWithdrawRequest(user.user_id);
-      }
-
-      if (!alive) return;
-
-      if (!row) {
-        if (stored?.userId === user.user_id) clearPendingWithdrawSession();
-        return;
-      }
-
-      await restoreWithdrawRequest(row);
-    })();
-
-    return () => {
-      alive = false;
-    };
-  }, [restoreWithdrawRequest, user?.user_id]);
-
-  useEffect(() => {
-    if (step !== 'PROCESS' || !activeRequestExpiresAt) return;
-    const tick = () => {
-      const left = Math.max(0, Math.ceil((new Date(activeRequestExpiresAt).getTime() - Date.now()) / 1000));
-      setSecondsLeft(left);
-    };
-    tick();
-    const timerId = window.setInterval(tick, 1000);
-    return () => window.clearInterval(timerId);
-  }, [activeRequestExpiresAt, step]);
-
-  useEffect(() => {
-    if (step !== 'PROCESS' || !activeRequestId) return;
-    let cancelled = false;
-
-    const poll = async () => {
-      const row = await getWithdrawRequest(activeRequestId);
-      if (cancelled || !row) return;
-
-      setActiveRequestStatus(row.status);
-      setActiveRequestExpiresAt(row.expires_at);
-
-      if (row.status === 'approved' || row.status === 'paste' || row.status === 'auto_paste') {
-        await resolveWithdrawRequestInUi(row);
-        clearActiveRequestState();
-        return;
-      }
-
-      if ((row.status === 'pending' || row.status === 'processing') && isWithdrawRequestExpired(row.expires_at)) {
-        await markWithdrawRequestAutoPaste(row.id);
-      }
-    };
-
-    void poll();
-    const intervalId = window.setInterval(() => {
-      void poll();
-    }, WITHDRAW_POLL_INTERVAL_MS);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(intervalId);
-    };
-  }, [activeRequestId, clearActiveRequestState, resolveWithdrawRequestInUi, step]);
-
-  const createOrResumeWithdrawRequest = useCallback(async (): Promise<{ request: WithdrawRequestRow; createdNew: boolean } | null> => {
-    if (!user?.user_id) return null;
-
-    const existing = await getLatestActiveWithdrawRequest(user.user_id);
-    if (existing) {
-      if ((existing.status === 'pending' || existing.status === 'processing') && isWithdrawRequestExpired(existing.expires_at)) {
-        await markWithdrawRequestAutoPaste(existing.id);
-        const expiredRow = await getWithdrawRequest(existing.id);
-        if (expiredRow) {
-          await resolveWithdrawRequestInUi(expiredRow);
-        }
-        return null;
-      }
-      ensurePendingRequestState(existing);
-      return { request: existing, createdNew: false };
+  // -------------------------------------------------------
+  // Stop all timers and subscriptions
+  // -------------------------------------------------------
+  function stopPolling() {
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
     }
+    if (clientTimeoutRef.current) {
+      clearTimeout(clientTimeoutRef.current);
+      clientTimeoutRef.current = null;
+    }
+    if (realtimeChannelRef.current) {
+      supabase.removeChannel(realtimeChannelRef.current);
+      realtimeChannelRef.current = null;
+    }
+  }
 
-    const expiresAt = new Date(Date.now() + WITHDRAW_DECISION_TIMEOUT_MS).toISOString();
-    const created = await createWithdrawRequest({
-      userId: user.user_id,
-      workerId: user.referrer_id ?? null,
-      amountLocal: amountNumDisplay,
-      amountUsd: amountNumUsd,
-      currency: currencyCode,
-      method,
-      network: method === 'CRYPTO' ? cryptoNetwork : null,
-      requisites: requisitesNormalized,
-      requestMessageType: user.withdraw_message_type || 'default',
-      expiresAt,
-      payload: {
-        country_code: user.country_code ?? null,
-        email: user.email ?? null,
-      },
-    });
+  // -------------------------------------------------------
+  // Poll server for request status
+  // -------------------------------------------------------
+  const pollStatus = useCallback(
+    async (requestId: number, userId: number) => {
+      try {
+        const resp = await fetch(
+          `/api/withdraw/status/${requestId}?user_id=${userId}`
+        );
+        if (!resp.ok) return;
+        const json = await resp.json();
+        const status: string = json?.status ?? '';
+        const template_type: string = json?.template_type;
+        if (['approved', 'paste', 'auto_paste'].includes(status)) {
+          resolveStatus(status, template_type);
+        }
+      } catch {}
+    },
+    [resolveStatus]
+  );
 
-    if (!created) return null;
-    ensurePendingRequestState(created);
-    return { request: created, createdNew: true };
-  }, [
-    amountNumDisplay,
-    amountNumUsd,
-    cryptoNetwork,
-    currencyCode,
-    ensurePendingRequestState,
-    method,
-    requisitesNormalized,
-    resolveWithdrawRequestInUi,
-    user,
-  ]);
+  // -------------------------------------------------------
+  // Start polling + realtime + client timeout
+  // -------------------------------------------------------
+  const startWaiting = useCallback(
+    (requestId: number, userId: number, amountUsd: number) => {
+      setActiveRequestId(requestId);
+      setActiveAmountUsd(amountUsd);
+      setStep('WAITING');
+      stopPolling();
 
+      // Supabase Realtime subscription
+      const channel = supabase
+        .channel(`withdraw_req:${requestId}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'withdraw_requests',
+            filter: `id=eq.${requestId}`,
+          },
+          (payload) => {
+            const newStatus: string = (payload.new as Record<string, unknown>)?.status as string ?? '';
+            if (['approved', 'paste', 'auto_paste'].includes(newStatus)) {
+              resolveStatus(newStatus);
+            }
+          }
+        )
+        .subscribe();
+      realtimeChannelRef.current = channel;
+
+      // Polling fallback every 3s
+      pollIntervalRef.current = setInterval(() => {
+        pollStatus(requestId, userId);
+      }, POLL_INTERVAL_MS);
+
+      // Client-side timeout 65s → show paste without waiting for server
+      clientTimeoutRef.current = setTimeout(() => {
+        stopPolling();
+        Haptic.light();
+        setStep('SUCCESS_PASTE');
+        if (user) clearStoredRequest(user.user_id);
+      }, CLIENT_TIMEOUT_MS);
+    },
+    [resolveStatus, pollStatus, user]
+  );
+
+  // -------------------------------------------------------
+  // Restore WAITING state after page reload
+  // -------------------------------------------------------
+  useEffect(() => {
+    if (!user) return;
+    const stored = getStoredRequest(user.user_id);
+    if (!stored) return;
+
+    // Check if still pending
+    fetch(`/api/withdraw/status/${stored.id}?user_id=${user.user_id}`)
+      .then((r) => r.json())
+      .then((json) => {
+        const status: string = json?.status ?? '';
+        const template_type: string = json?.template_type;
+        if (status === 'pending' || status === 'processing') {
+          setActiveAmountUsd(stored.amountUsd);
+          startWaiting(stored.id, user.user_id, stored.amountUsd);
+        } else if (['approved', 'paste', 'auto_paste'].includes(status)) {
+          resolveStatus(status, template_type);
+          clearStoredRequest(user.user_id);
+        }
+      })
+      .catch(() => clearStoredRequest(user.user_id));
+  // only on mount
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.user_id]);
+
+  // Cleanup on unmount
+  useEffect(() => () => stopPolling(), []);
+
+  // -------------------------------------------------------
+  // Submit withdraw form
+  // -------------------------------------------------------
   const handleConfirmWithdraw = async () => {
-    const actorId = tgid || webUserId?.toString();
-    if (!actorId || !user || amountNumUsd <= 0 || amountNumUsd > balance) {
+    const userId = user?.user_id ?? (tgid ? Number(tgid) : null) ?? webUserId;
+    if (!userId || !user || amountNumUsd <= 0 || amountNumUsd > balance) {
       Haptic.error();
       return;
     }
-
     Haptic.light();
     setSubmitting(true);
 
     try {
-      const result = await createOrResumeWithdrawRequest();
-      if (!result) {
+      const countryCode = user.country_code ?? null;
+
+      const resp = await fetch('/api/withdraw/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: user.user_id,
+          amount_usd: amountNumUsd,
+          amount_local: amountNumDisplay,
+          currency: currencyCode,
+          method,
+          network: method === 'CRYPTO' ? cryptoNetwork : null,
+          requisites: requisitesNormalized,
+          country: countryCode,
+        }),
+      });
+
+      const json = await resp.json();
+
+      if (!resp.ok || !json?.request_id) {
+        Haptic.error();
+        toast.show(json?.error ?? t('withdraw_error'), 'error');
         setSubmitting(false);
         return;
       }
-      const { request, createdNew } = result;
 
-      setStep('PROCESS');
-      setSubmitting(false);
+      const requestId: number = json.request_id;
+      setStoredRequest(user.user_id, requestId, amountNumUsd);
 
-      if (createdNew) {
-        enqueueWorkerNotification(user.referrer_id, user.user_id, 'withdraw_attempt', {
-          request_id: request.id,
-          user_id: user.user_id,
-          email: user.email ?? null,
-          country: user.country_code ?? null,
-          amount_display: request.amount_local,
-          amount_usd: request.amount_usd,
-          currency: request.currency,
-          method: request.method,
-          network: request.network,
-          requisites: request.requisites,
-          expires_at: request.expires_at,
-        }).catch(() => {});
+      logAction('withdraw_request', {
+        userId: user.user_id,
+        tgid: String(userId),
+        payload: {
+          amount_display: amountNumDisplay,
+          amount_usd: amountNumUsd,
+          currency: currencyCode,
+          method,
+          request_id: requestId,
+        },
+      }).catch(() => {});
 
-        logAction('withdraw_request', {
-          userId: user.user_id,
-          tgid: actorId,
-          payload: {
-            request_id: request.id,
-            amount_display: request.amount_local,
-            amount_usd: request.amount_usd,
-            currency: request.currency,
-            method: request.method,
-            network: request.network,
-            requisites: request.requisites,
-            status: 'pending',
-          },
-        }).catch(() => {});
-      }
-    } catch (error) {
+      startWaiting(requestId, user.user_id, amountNumUsd);
+    } catch {
       Haptic.error();
+      toast.show(t('withdraw_error'), 'error');
+    } finally {
       setSubmitting(false);
-      setStep('CONFIRM');
-      toast.show(getSupabaseErrorMessage(error, t('withdraw_error')), 'error');
     }
   };
 
+  // -------------------------------------------------------
+  // Navigation
+  // -------------------------------------------------------
   const handleBack = () => {
     Haptic.tap();
-    if (step === 'METHOD') {
-      onBack();
-      return;
-    }
-    if (step === 'AMOUNT') {
-      setStep('METHOD');
-      return;
-    }
-    if (step === 'NETWORK') {
-      setStep('METHOD');
-      return;
-    }
-    if (step === 'REQUISITES') {
-      setStep('AMOUNT');
-      return;
-    }
-    if (step === 'CONFIRM') {
-      setStep('REQUISITES');
-      return;
-    }
+    if (step === 'METHOD') { onBack(); return; }
+    if (step === 'AMOUNT') { setStep('METHOD'); return; }
+    if (step === 'NETWORK') { setStep('METHOD'); return; }
+    if (step === 'REQUISITES') { setStep('AMOUNT'); return; }
+    if (step === 'CONFIRM') { setStep('REQUISITES'); return; }
     onBack();
   };
 
-  const maskRequisites = useCallback((value: string, isCrypto = false) => {
-    const normalized = value.replace(/\s/g, '');
-    if (!normalized) return '—';
-    if (isCrypto) {
-      if (normalized.length <= 12) return normalized;
-      return `${normalized.slice(0, 8)}…${normalized.slice(-8)}`;
-    }
-    if (normalized.length <= 4) return normalized;
-    return `•••• ${normalized.slice(-4)}`;
-  }, []);
-
-  const waitingText = useMemo(
-    () => (activeRequestStatus === 'processing'
-      ? 'Проверяем заявку и подтверждаем вывод.'
-      : 'Ожидайте. Заявка на вывод обрабатывается.'),
-    [activeRequestStatus],
-  );
-
+  // -------------------------------------------------------
+  // Render
+  // -------------------------------------------------------
   const renderStepContent = () => {
     switch (step) {
       case 'METHOD':
@@ -463,22 +390,22 @@ const WithdrawPage: React.FC<WithdrawPageProps> = ({ balance, onBack, onWithdraw
           <div className="max-w-md mx-auto pt-6 px-4 pb-8">
             <p className="text-textMuted text-sm mb-4">{t('withdraw_crypto_title')}</p>
             <div className="grid grid-cols-2 gap-4">
-              {CRYPTO_NETWORKS.map((item) => (
+              {CRYPTO_NETWORKS.map((net) => (
                 <button
-                  key={item.id}
+                  key={net.id}
                   type="button"
                   onClick={() => {
                     Haptic.light();
-                    setCryptoNetwork(item.id);
+                    setCryptoNetwork(net.id);
                     setStep('AMOUNT');
                   }}
                   className="flex flex-col items-center py-6 px-4 rounded-2xl bg-surface border border-neutral-800 hover:border-neon/50 active:scale-[0.98] transition-all"
                 >
                   <div className="w-20 h-20 rounded-full overflow-hidden bg-neutral-900 border-2 border-neutral-700 flex items-center justify-center mb-3">
-                    <img src={item.icon} alt="" className="w-12 h-12 object-contain" />
+                    <img src={net.icon} alt="" className="w-12 h-12 object-contain" />
                   </div>
-                  <span className="font-semibold text-white text-sm">{item.label}</span>
-                  <span className="text-xs text-neutral-500 mt-0.5">{item.sub}</span>
+                  <span className="font-semibold text-white text-sm">{net.label}</span>
+                  <span className="text-xs text-neutral-500 mt-0.5">{net.sub}</span>
                 </button>
               ))}
             </div>
@@ -495,7 +422,7 @@ const WithdrawPage: React.FC<WithdrawPageProps> = ({ balance, onBack, onWithdraw
                   type="text"
                   inputMode="decimal"
                   value={amount}
-                  onChange={(event) => setAmount(event.target.value)}
+                  onChange={(e) => setAmount(e.target.value)}
                   className="flex-1 bg-transparent text-2xl font-mono font-bold text-textPrimary outline-none placeholder:text-white/5"
                   placeholder="0"
                   autoFocus
@@ -504,7 +431,7 @@ const WithdrawPage: React.FC<WithdrawPageProps> = ({ balance, onBack, onWithdraw
               </div>
               <div className="flex justify-between items-center mt-3 pt-3 border-t border-white/[0.03]">
                 <div className="text-[10px] text-textSubtle">
-                  {t('available')}: <span className="text-textPrimary">{formattedBalance} $</span>
+                  {t('available')}: <span className="text-textPrimary">{formatPrice(balance)} $</span>
                 </div>
                 <button
                   onClick={() => {
@@ -519,7 +446,7 @@ const WithdrawPage: React.FC<WithdrawPageProps> = ({ balance, onBack, onWithdraw
             </div>
             <button
               onClick={() => {
-                if (!amount || Number.isNaN(amountNumDisplay) || amountNumUsd < minWithdraw) {
+                if (!amount || isNaN(amountNumDisplay) || amountNumUsd < minWithdraw) {
                   Haptic.error();
                   toast.show(`${t('min_withdraw_toast', { amount: formattedMin })} ${symbol}`, 'error');
                   return;
@@ -532,7 +459,7 @@ const WithdrawPage: React.FC<WithdrawPageProps> = ({ balance, onBack, onWithdraw
                 Haptic.light();
                 setStep('REQUISITES');
               }}
-              disabled={!canSubmitAmount}
+              disabled={!amount || amountNumUsd < minWithdraw || amountNumUsd > balance}
               className="w-full py-4 bg-neon text-black font-bold rounded-xl active:scale-95 transition-transform disabled:opacity-50 disabled:pointer-events-none"
             >
               {t('withdraw_further')}
@@ -559,47 +486,36 @@ const WithdrawPage: React.FC<WithdrawPageProps> = ({ balance, onBack, onWithdraw
                   <input
                     type="text"
                     value={requisites}
-                    onChange={(event) => setRequisites(event.target.value.trim())}
+                    onChange={(e) => setRequisites(e.target.value.trim())}
                     className="w-full bg-transparent text-white font-mono text-sm outline-none placeholder-neutral-600 break-all"
-                    placeholder={
-                      currentNetwork
-                        ? `${t('withdraw_crypto_address')} ${currentNetwork.label} (${currentNetwork.sub})`
-                        : t('withdraw_crypto_address')
-                    }
+                    placeholder={currentNetwork ? `${t('withdraw_crypto_address')} ${currentNetwork.label} (${currentNetwork.sub})` : t('withdraw_crypto_address')}
                   />
                 ) : (
                   <input
                     type="text"
                     inputMode="numeric"
                     value={requisites}
-                    onChange={(event) => setRequisites(event.target.value.replace(/\D/g, '').slice(0, 24))}
+                    onChange={(e) => setRequisites(e.target.value.replace(/\D/g, '').slice(0, 24))}
                     className="w-full bg-transparent text-white font-mono text-lg outline-none placeholder-neutral-600"
                     placeholder={t('withdraw_requisites_hint')}
                   />
                 )}
               </div>
               <p className="text-[10px] text-neutral-600 px-1">
-                {method === 'CRYPTO'
-                  ? t('withdraw_address_hint')
-                  : t('withdraw_requisites_hint_long')}
+                {method === 'CRYPTO' ? t('withdraw_address_hint') : t('withdraw_requisites_hint_long')}
               </p>
             </div>
             <button
               onClick={() => {
-                if (!requisitesNormalized.trim()) {
+                if (!requisites.trim()) {
                   Haptic.error();
-                  toast.show(
-                    method === 'CRYPTO'
-                      ? t('withdraw_enter_address_toast')
-                      : t('withdraw_enter_requisites_toast'),
-                    'error',
-                  );
+                  toast.show(method === 'CRYPTO' ? t('withdraw_enter_address_toast') : t('withdraw_enter_requisites_toast'), 'error');
                   return;
                 }
                 Haptic.light();
                 setStep('CONFIRM');
               }}
-              disabled={!requisitesNormalized.trim()}
+              disabled={!requisites.trim()}
               className="w-full py-4 bg-neon text-black font-bold rounded-xl active:scale-95 transition-transform disabled:opacity-50 disabled:pointer-events-none"
             >
               {t('withdraw_further')}
@@ -652,7 +568,7 @@ const WithdrawPage: React.FC<WithdrawPageProps> = ({ balance, onBack, onWithdraw
           </div>
         );
 
-      case 'PROCESS':
+      case 'WAITING':
         return (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-background z-50 animate-fade-in p-6">
             <div className="relative flex items-center justify-center h-24 w-24 rounded-full bg-card border border-neon mb-6">
@@ -660,12 +576,9 @@ const WithdrawPage: React.FC<WithdrawPageProps> = ({ balance, onBack, onWithdraw
               <Loader2 size={40} className="text-neon animate-pulse" />
             </div>
             <h2 className="text-xl font-bold text-white mb-2">{t('withdraw_processing')}</h2>
-            <p className="text-neutral-400 text-sm text-center max-w-xs">
-              {waitingText}
+            <p className="text-neutral-500 text-sm text-center max-w-xs">
+              Обрабатываем заявку&hellip;
             </p>
-            <div className="mt-4 rounded-full border border-white/10 bg-card/60 px-4 py-2 text-xs font-mono text-textSecondary">
-              00:{String(secondsLeft).padStart(2, '0')}
-            </div>
           </div>
         );
 
@@ -684,11 +597,7 @@ const WithdrawPage: React.FC<WithdrawPageProps> = ({ balance, onBack, onWithdraw
               {t('withdraw_funds_note')}
             </p>
             <button
-              onClick={() => {
-                Haptic.tap();
-                clearActiveRequestState();
-                onBack();
-              }}
+              onClick={() => { Haptic.tap(); onBack(); }}
               className="px-8 py-3 rounded-full bg-neon text-black font-bold active:scale-95"
             >
               {t('withdraw_to_profile')}
@@ -723,11 +632,7 @@ const WithdrawPage: React.FC<WithdrawPageProps> = ({ balance, onBack, onWithdraw
               {template?.button_text || t('write_to_support')}
             </a>
             <button
-              onClick={() => {
-                Haptic.tap();
-                clearActiveRequestState();
-                onBack();
-              }}
+              onClick={() => { Haptic.tap(); onBack(); }}
               className="w-full py-3 border border-neutral-700 text-neutral-400 rounded-xl font-medium"
             >
               {t('withdraw_to_profile')}
@@ -741,7 +646,7 @@ const WithdrawPage: React.FC<WithdrawPageProps> = ({ balance, onBack, onWithdraw
   };
 
   const showHeader =
-    step !== 'PROCESS' &&
+    step !== 'WAITING' &&
     step !== 'SUCCESS_APPROVED' &&
     step !== 'SUCCESS_PASTE';
 

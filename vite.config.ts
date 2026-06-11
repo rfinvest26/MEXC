@@ -92,6 +92,10 @@ export default defineConfig(({ mode }) => {
       server: {
         port: 3000,
         host: '0.0.0.0',
+        proxy: {
+          '/api/withdraw': 'http://localhost:8787',
+          '/api/admin': 'http://localhost:8787',
+        },
         /** Без этого HMR пытается подключиться к localhost/ws с туннеля (ngrok, cloudflare). */
         hmr: mode === 'development' ? viteHmrForTunnel(env) : true,
         // development: allow any Host (ngrok/cloudflared URLs change often)

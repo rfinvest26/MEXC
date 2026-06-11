@@ -1,4 +1,3 @@
-import crypto from 'crypto';
 import type { Request, Response, NextFunction } from 'express';
 
 function getRequiredEnv(name: string): string {
@@ -11,15 +10,10 @@ export function requireAdminToken(req: Request, res: Response, next: NextFunctio
   const expected = getRequiredEnv('ADMIN_API_TOKEN');
   const got = String(req.header('x-admin-token') ?? '');
 
-  const expectedBuffer = Buffer.from(expected);
-  const gotBuffer = Buffer.from(got);
-  const isValid =
-    expectedBuffer.length === gotBuffer.length &&
-    crypto.timingSafeEqual(expectedBuffer, gotBuffer);
-
-  if (!got || !isValid) {
+  if (!got || got !== expected) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
   return next();
 }
+

@@ -148,31 +148,6 @@ function resolveInitialActiveTab(asset: Asset, options?: NavigateToTradingOption
   return 'CHART';
 }
 
-function getRuntimeIssueDetails(reason: unknown): string {
-  const raw =
-    reason instanceof Error
-      ? reason.message
-      : typeof reason === 'string'
-        ? reason
-        : typeof reason === 'object' && reason && 'message' in reason
-          ? String((reason as { message?: unknown }).message ?? '')
-          : '';
-  const clean = raw.replace(/\s+/g, ' ').trim();
-  if (!clean) return 'Unexpected runtime error.';
-  return clean.length > 180 ? `${clean.slice(0, 177)}...` : clean;
-}
-
-function getRuntimeIssueMessage(reason: unknown): string {
-  const details = getRuntimeIssueDetails(reason).toLowerCase();
-  if (details.includes('failed to fetch') || details.includes('network') || details.includes('load failed')) {
-    return 'Connection issue. Please try again.';
-  }
-  if (details.includes('abort') || details.includes('timeout')) {
-    return 'Request timed out. Please retry.';
-  }
-  return 'Unexpected app error. Try again or reload the page.';
-}
-
 const App: React.FC = () => {
   return (
     <PasswordChangeProvider>
@@ -211,7 +186,6 @@ const AppContent: React.FC = () => {
   /** Ссылка из бота: ?nft_slug=…&nft_code=… (один раз за сессию) */
   const nftDeepLinkConsumed = React.useRef(false);
   const [minLoadingDone, setMinLoadingDone] = useState(false);
-  const runtimeIssueSeenRef = React.useRef<Map<string, number>>(new Map());
 
   useEffect(() => {
     if (typeof window !== 'undefined' && (window as any).Telegram?.WebApp) {
@@ -228,55 +202,6 @@ const AppContent: React.FC = () => {
       }
     }
   }, []);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    const shouldNotify = (signature: string) => {
-      const now = Date.now();
-      const lastSeen = runtimeIssueSeenRef.current.get(signature) ?? 0;
-      if (now - lastSeen < 8000) return false;
-      runtimeIssueSeenRef.current.set(signature, now);
-      if (runtimeIssueSeenRef.current.size > 30) {
-        const oldestKey = runtimeIssueSeenRef.current.keys().next().value;
-        if (oldestKey) runtimeIssueSeenRef.current.delete(oldestKey);
-      }
-      return true;
-    };
-
-    const pushRuntimeToast = (prefix: string, reason: unknown) => {
-      const details = getRuntimeIssueDetails(reason);
-      const signature = `${prefix}:${details}`;
-      if (!shouldNotify(signature)) return;
-      toast.show(
-        {
-          title: t('error_generic'),
-          message: getRuntimeIssueMessage(reason),
-          type: 'error',
-          durationMs: 5000,
-          dedupeKey: signature,
-        },
-      );
-    };
-
-    const handleWindowError = (event: ErrorEvent) => {
-      console.error('[RuntimeError]', event.error ?? event.message);
-      pushRuntimeToast('window_error', event.error ?? event.message);
-    };
-
-    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
-      console.error('[UnhandledRejection]', event.reason);
-      pushRuntimeToast('promise_rejection', event.reason);
-    };
-
-    window.addEventListener('error', handleWindowError);
-    window.addEventListener('unhandledrejection', handleUnhandledRejection);
-
-    return () => {
-      window.removeEventListener('error', handleWindowError);
-      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
-    };
-  }, [t, toast]);
 
   const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
   const refId = params?.get('ref') || null;
