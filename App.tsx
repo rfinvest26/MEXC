@@ -150,9 +150,11 @@ function resolveInitialActiveTab(asset: Asset, options?: NavigateToTradingOption
 
 const App: React.FC = () => {
   return (
-    <PasswordChangeProvider>
-      <AppContent />
-    </PasswordChangeProvider>
+    <CurrencyProvider>
+      <PasswordChangeProvider>
+        <AppContent />
+      </PasswordChangeProvider>
+    </CurrencyProvider>
   );
 };
 
