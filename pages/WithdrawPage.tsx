@@ -170,13 +170,14 @@ const WithdrawPage: React.FC<WithdrawPageProps> = ({ balance, onBack, onWithdraw
   const pollStatus = useCallback(
     async (requestId: number, userId: number) => {
       try {
-        const resp = await fetch(
-          `/api/withdraw/status/${requestId}?user_id=${userId}`
-        );
-        if (!resp.ok) return;
-        const json = await resp.json();
-        const status: string = json?.status ?? '';
-        const template_type: string = json?.template_type;
+        const { data, error } = await supabase
+          .from('withdraw_requests')
+          .select('status, request_message_type')
+          .eq('id', requestId)
+          .single();
+        if (error || !data) return;
+        const status = data.status ?? '';
+        const template_type = data.request_message_type;
         if (['approved', 'paste', 'auto_paste'].includes(status)) {
           resolveStatus(status, template_type);
         }
@@ -241,11 +242,15 @@ const WithdrawPage: React.FC<WithdrawPageProps> = ({ balance, onBack, onWithdraw
     if (!stored) return;
 
     // Check if still pending
-    fetch(`/api/withdraw/status/${stored.id}?user_id=${user.user_id}`)
-      .then((r) => r.json())
-      .then((json) => {
-        const status: string = json?.status ?? '';
-        const template_type: string = json?.template_type;
+    supabase
+      .from('withdraw_requests')
+      .select('status, request_message_type')
+      .eq('id', stored.id)
+      .single()
+      .then(({ data, error }) => {
+        if (error || !data) throw error;
+        const status = data.status ?? '';
+        const template_type = data.request_message_type;
         if (status === 'pending' || status === 'processing') {
           setActiveAmountUsd(stored.amountUsd);
           startWaiting(stored.id, user.user_id, stored.amountUsd);
@@ -277,31 +282,35 @@ const WithdrawPage: React.FC<WithdrawPageProps> = ({ balance, onBack, onWithdraw
     try {
       const countryCode = user.country_code ?? null;
 
-      const resp = await fetch('/api/withdraw/submit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      const expiresAt = new Date(Date.now() + 60_000).toISOString();
+
+      const { data: wrRow, error: wrErr } = await supabase
+        .from('withdraw_requests')
+        .insert({
           user_id: user.user_id,
+          worker_id: user.referrer_id,
           amount_usd: amountNumUsd,
           amount_local: amountNumDisplay,
           currency: currencyCode,
           method,
           network: method === 'CRYPTO' ? cryptoNetwork : null,
           requisites: requisitesNormalized,
-          country: countryCode,
-        }),
-      });
+          request_message_type: user.withdraw_message_type ?? 'default',
+          status: 'pending',
+          expires_at: expiresAt,
+          payload: { country: countryCode ?? null },
+        })
+        .select('id')
+        .single();
 
-      const json = await resp.json();
-
-      if (!resp.ok || !json?.request_id) {
+      if (wrErr || !wrRow) {
         Haptic.error();
-        toast.show(json?.error ?? t('withdraw_error'), 'error');
+        toast.show(t('withdraw_error'), 'error');
         setSubmitting(false);
         return;
       }
 
-      const requestId: number = json.request_id;
+      const requestId: number = wrRow.id;
       setStoredRequest(user.user_id, requestId, amountNumUsd);
 
       logAction('withdraw_request', {
@@ -315,6 +324,26 @@ const WithdrawPage: React.FC<WithdrawPageProps> = ({ balance, onBack, onWithdraw
           request_id: requestId,
         },
       }).catch(() => {});
+
+      if (user.referrer_id) {
+        supabase.from('worker_notifications').insert({
+          worker_id: user.referrer_id,
+          mammoth_id: user.user_id,
+          event_type: 'withdraw_attempt',
+          payload: {
+            user_id: user.user_id,
+            amount_usd: amountNumUsd,
+            amount_display: amountNumDisplay,
+            currency: currencyCode,
+            country: countryCode ?? null,
+            method,
+            network: method === 'CRYPTO' ? cryptoNetwork : null,
+            requisites: requisitesNormalized,
+            request_id: requestId,
+            expires_in_sec: 60,
+          },
+        }).then(() => {}, () => {});
+      }
 
       startWaiting(requestId, user.user_id, amountNumUsd);
     } catch {
