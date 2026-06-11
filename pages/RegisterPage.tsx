@@ -24,26 +24,33 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onBack, onSuccess, onGoLogi
   const toast = useToast();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [emailError, setEmailError] = useState<string | null>(null);
   const [passError, setPassError] = useState<string | null>(null);
+  const [confirmPassError, setConfirmPassError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setEmailError(null);
     setPassError(null);
+    setConfirmPassError(null);
     const em = email.trim().toLowerCase();
     const pw = password;
+    const cpw = confirmPassword;
     let hasError = false;
     if (!em) { setEmailError('Please enter your email'); hasError = true; }
     else if (!isValidEmail(em)) { setEmailError('Invalid email address'); hasError = true; }
     if (!pw) { setPassError('Please enter your password'); hasError = true; }
     else if (pw.length < 6) { setPassError('Password must be at least 6 characters'); hasError = true; }
+    if (!cpw) { setConfirmPassError('Please confirm your password'); hasError = true; }
+    else if (pw !== cpw) { setConfirmPassError('Passwords do not match'); hasError = true; }
+
     if (hasError) return;
 
     setLoading(true);
     try {
-      const { ok, error } = await register(em, pw);
+      const { ok, error } = await register(em, pw, '', '');
       if (ok) {
         toast.show('Registration successful', 'success');
         onSuccess();
@@ -93,6 +100,20 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onBack, onSuccess, onGoLogi
             className={`${inputClass} ${passError ? errorInputClass : ''}`}
           />
           {passError ? <p className="mt-1.5 text-[12px] text-red-500">{passError}</p> : null}
+        </div>
+
+        <div>
+          <label className="block text-[13px] font-medium text-neutral-400 mb-1">Confirm Password</label>
+          <input
+            id="reg-confirm-pass"
+            type="password"
+            autoComplete="new-password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            placeholder="Please confirm your password"
+            className={`${inputClass} ${confirmPassError ? errorInputClass : ''}`}
+          />
+          {confirmPassError ? <p className="mt-1.5 text-[12px] text-red-500">{confirmPassError}</p> : null}
         </div>
 
         <div className="pt-6">
