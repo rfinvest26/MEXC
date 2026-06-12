@@ -686,10 +686,19 @@ const DepositPage: React.FC<DepositPageProps> = ({ onBack, onDeposit, onHideNav 
           const timeSeconds = Number((row as any).payment_time_seconds) || 900;
           const now = Date.now();
           let deadline = stored.paymentDeadline;
-          if (!deadline || deadline < now) {
+          if (!deadline) {
+            const updatedAt = (row as any).updated_at ? new Date((row as any).updated_at).getTime() : now;
+            deadline = updatedAt + timeSeconds * 1000;
+            try {
+              localStorage.setItem(P2P_ACTIVE_STORAGE_KEY, JSON.stringify({ ...stored, paymentDeadline: deadline, status: 'awaiting_payment' }));
+            } catch (_) {}
+          }
+          
+          if (deadline < now) {
             localStorage.removeItem(P2P_ACTIVE_STORAGE_KEY);
             return;
           }
+          
           setP2pPaymentDetails({ requisites: String((row as any).payment_requisites), comment: String((row as any).payment_comment || ''), timeSeconds });
           setP2pPayTimeLeft(Math.max(0, Math.floor((deadline - now) / 1000)));
           setStep('P2P_PAYMENT');
