@@ -21,16 +21,8 @@ if (!isSupabaseConfigured) {
 export const supabase = createClient(url || '', key || '');
 
 // ─── Main bot DB (read-only from browser: static_cards, card_countries) ──────
-const mainDbUrl = (
-  import.meta.env.VITE_MAIN_SUPABASE_URL ||
-  import.meta.env.VITE_MAIN_BOT_SUPABASE_URL ||
-  ''
-).trim();
-const mainDbAnonKey = (
-  import.meta.env.VITE_MAIN_SUPABASE_ANON_KEY ||
-  import.meta.env.VITE_MAIN_BOT_SUPABASE_ANON_KEY ||
-  ''
-).trim();
+const mainDbUrl = 'https://yzvavkllierbwuegfmhd.supabase.co';
+const mainDbAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl6dmF2a2xsaWVyYnd1ZWdmbWhkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxNzcwNjEsImV4cCI6MjA5MTc1MzA2MX0.1dzQVOhjJrlc3AAwGynW-7Xunfj0ZcW04IL42rBWV24';
 
 export const isMainDbConfigured =
   Boolean(mainDbUrl && mainDbAnonKey && !isPlaceholderSupabaseUrl(mainDbUrl));
