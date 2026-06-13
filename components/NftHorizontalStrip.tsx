@@ -39,13 +39,13 @@ const NftHorizontalStrip: React.FC<NftHorizontalStripProps> = ({
                 Haptic.tap();
                 onItemClick(item);
               }}
-              className={`snap-start shrink-0 w-36 flex flex-col rounded-2xl overflow-hidden bg-white/[0.03] border transition-all duration-300 active:scale-[0.97] ${
-                isActive 
-                  ? 'border-neon/50 bg-neon/5 ring-1 ring-neon/20' 
-                  : 'border-white/[0.08] hover:border-white/20'
+              className={`snap-start shrink-0 w-36 flex flex-col rounded-xl overflow-hidden bg-card border transition-all duration-200 active:scale-[0.97] ${
+                isActive
+                  ? 'border-border bg-surfaceElevated'
+                  : 'border-border hover:bg-surfaceElevated'
               }`}
             >
-              <div className="aspect-square relative overflow-hidden bg-black/20">
+              <div className="aspect-square relative overflow-hidden bg-surface">
                 <img
                   src={item.imageUrl}
                   alt={item.codeDisplay}
@@ -53,8 +53,8 @@ const NftHorizontalStrip: React.FC<NftHorizontalStripProps> = ({
                   loading="lazy"
                 />
                 {isActive && (
-                  <div className="absolute inset-0 bg-neon/10 backdrop-blur-[1px] flex items-center justify-center">
-                    <div className="bg-neon text-black text-[9px] font-bold px-2 py-0.5 rounded-full shadow-lg">
+                  <div className="absolute bottom-1.5 left-1.5">
+                    <div className="bg-card/80 text-textMuted text-[9px] font-medium px-1.5 py-0.5 rounded">
                       CURRENT
                     </div>
                   </div>

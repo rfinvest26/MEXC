@@ -2,12 +2,12 @@
 @import "tailwindcss";
 
 @theme {
-  --color-background: #000000;
-  --color-surface: #0a0d14;
-  --color-card: #11141e;
-  --color-border: #1a1f2e;
-  --color-surfaceElevated: #161a26;
-  --color-subtle: #05070a;
+  --color-background: #0b0e16;
+  --color-surface: #12151f;
+  --color-card: #171b27;
+  --color-border: #242a3a;
+  --color-surfaceElevated: #1d2230;
+  --color-subtle: #0b0e16;
   --color-neon: #2b82f6;
   --color-accent: #1972e2;
   --color-accentMuted: rgba(25, 114, 226, 0.1);
@@ -52,11 +52,10 @@
   --ease-spring: cubic-bezier(0.2, 0.9, 0.2, 1);
   --duration-flash: 300ms;
   --duration-modal: 300ms;
-  --color-flash-up: rgba(16, 185, 129, 0.35);
-  --color-flash-down: rgba(248, 113, 113, 0.35);
-  --border-subtle: 1px solid rgba(255, 255, 255, 0.05);
+  --color-flash-up: rgba(0, 210, 106, 0.28);
+  --color-flash-down: rgba(246, 70, 93, 0.28);
+  --border-subtle: 1px solid var(--color-border);
   --space-unit: 8px;
-  --surface-gradient: linear-gradient(170deg, rgba(28, 71, 122, 0.24) 0%, rgba(14, 29, 48, 0.8) 55%, rgba(8, 16, 29, 0.96) 100%);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -207,9 +206,9 @@ button, a, [role="button"], .cursor-pointer { touch-action: manipulation; -webki
 .skeleton-shimmer {
   background: linear-gradient(
     90deg,
-    rgba(255, 255, 255, 0.04) 0%,
-    rgba(255, 255, 255, 0.09) 40%,
-    rgba(255, 255, 255, 0.04) 80%
+    var(--color-surface) 0%,
+    var(--color-surfaceElevated) 40%,
+    var(--color-surface) 80%
   );
   background-size: 800px 100%;
   animation: shimmer 1.6s ease-in-out infinite;
@@ -276,8 +275,9 @@ button, a, [role="button"], .cursor-pointer { touch-action: manipulation; -webki
 .transition-etoro { transition-duration: 200ms; transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1); }
 .transition-etoro-card { transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
 .transition-modal { transition: opacity var(--duration-modal) var(--ease-modal), transform var(--duration-modal) var(--ease-modal); }
-.hover-row:hover { background-color: rgba(255, 255, 255, 0.04); transition: background-color 0.15s var(--ease-modal); }
-.hover-glow:focus-visible, .hover-glow:hover { box-shadow: 0 0 0 1px rgba(47, 124, 246, 0.25); transition: box-shadow 0.2s var(--ease-modal); }
+.hover-row:hover { background-color: var(--color-surfaceElevated); transition: background-color 0.12s var(--ease-modal); }
+.hover-glow:focus-visible { outline: 1px solid var(--color-border); outline-offset: 2px; }
+.hover-glow:hover { background-color: var(--color-surfaceElevated); }
 .border-subtle { border: var(--border-subtle); }
 .hairline-top { box-shadow: inset 0 1px 0 0 var(--color-divider); }
 .hairline-bottom { box-shadow: inset 0 -1px 0 0 var(--color-divider); }
@@ -293,7 +293,6 @@ button, a, [role="button"], .cursor-pointer { touch-action: manipulation; -webki
 
 .icon-soft {
   color: var(--color-icon);
-  filter: drop-shadow(0 10px 24px rgba(0, 0, 0, 0.45));
 }
 .icon-muted {
   color: var(--color-icon-muted);
@@ -303,11 +302,8 @@ button, a, [role="button"], .cursor-pointer { touch-action: manipulation; -webki
 }
 
 .nav-glass {
-  background: rgba(0, 0, 0, 0.92);
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
-  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-border);
 }
 
 .nav-item {
@@ -376,21 +372,21 @@ button, a, [role="button"], .cursor-pointer { touch-action: manipulation; -webki
 /* MEXC-style card with subtle border */
 .mexc-card {
   background: var(--color-card);
-  border: 1px solid rgba(255, 255, 255, 0.035);
+  border: 1px solid var(--color-border);
   border-radius: 12px;
 }
 
 /* MEXC input field */
 .mexc-input {
-  background: rgba(255, 255, 255, 0.018);
-  border: 1px solid rgba(255, 255, 255, 0.04);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
   border-radius: 10px;
   color: var(--color-textPrimary);
   transition: border-color 0.15s ease, background 0.15s ease;
 }
 .mexc-input:focus-within {
-  border-color: rgba(42, 123, 255, 0.35);
-  background: rgba(255, 255, 255, 0.025);
+  border-color: var(--color-textMuted);
+  background: var(--color-surfaceElevated);
 }
 
 /* MEXC standard buttons */
@@ -420,7 +416,7 @@ button, a, [role="button"], .cursor-pointer { touch-action: manipulation; -webki
   gap: 0.25rem;
   padding: 0.2rem;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--color-surface);
 }
 .segmented button {
   border-radius: 6px;
@@ -428,8 +424,8 @@ button, a, [role="button"], .cursor-pointer { touch-action: manipulation; -webki
 
 /* P2P Status Banner */
 .p2p-banner {
-  background: rgba(42, 123, 255, 0.03);
-  border: 1px solid rgba(42, 123, 255, 0.08);
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
 }
 
 /* User info chip */
@@ -438,9 +434,9 @@ button, a, [role="button"], .cursor-pointer { touch-action: manipulation; -webki
   align-items: center;
   gap: 4px;
   padding: 2px 8px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
   font-size: 11px;
   font-weight: 500;
   color: var(--color-textSecondary);
@@ -456,15 +452,14 @@ button, a, [role="button"], .cursor-pointer { touch-action: manipulation; -webki
 
 .exchange-card {
   background: var(--color-card);
-  border: 1px solid rgba(255, 255, 255, 0.035);
+  border: 1px solid var(--color-border);
   border-radius: 14px;
 }
 
 .exchange-panel {
-  background: rgba(255, 255, 255, 0.015);
-  border: 1px solid rgba(255, 255, 255, 0.03);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
   border-radius: 12px;
-  box-shadow: none;
 }
 
 .exchange-label {
@@ -479,13 +474,12 @@ button, a, [role="button"], .cursor-pointer { touch-action: manipulation; -webki
   min-height: 44px;
   width: 100%;
   border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.045);
-  background: rgba(255, 255, 255, 0.015);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
   color: var(--color-textPrimary);
   padding: 0 12px;
   transition:
     border-color 150ms ease-in-out,
-    box-shadow 150ms ease-in-out,
     background-color 150ms ease-in-out;
 }
 
@@ -495,8 +489,8 @@ button, a, [role="button"], .cursor-pointer { touch-action: manipulation; -webki
 
 .exchange-input:focus-visible {
   outline: none;
-  border-color: rgba(42, 123, 255, 0.4);
-  background: rgba(255, 255, 255, 0.025);
+  border-color: rgba(43, 130, 246, 0.4);
+  background: var(--color-surfaceElevated);
 }
 
 .exchange-btn {
@@ -521,9 +515,9 @@ button, a, [role="button"], .cursor-pointer { touch-action: manipulation; -webki
 }
 
 .exchange-btn-secondary {
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--color-surface);
   color: var(--color-textPrimary);
-  border: 1px solid rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--color-border);
 }
 
 /* ==========================================
@@ -532,7 +526,7 @@ button, a, [role="button"], .cursor-pointer { touch-action: manipulation; -webki
 
 /* Remove harsh gray borders project-wide */
 .border-neutral-800, .border-neutral-700, .border-neutral-900, .border-neutral-600 {
-  border-color: rgba(255, 255, 255, 0.035) !important;
+  border-color: var(--color-border) !important;
 }
 
 /* Ensure dashed borders keep their style */
@@ -543,16 +537,15 @@ button, a, [role="button"], .cursor-pointer { touch-action: manipulation; -webki
 /* Professional Matte Input & Dropdown Styling */
 input[type="text"]:not(.bg-transparent), input[type="number"]:not(.bg-transparent), input[type="password"]:not(.bg-transparent), input[type="email"]:not(.bg-transparent), input[type="numeric"]:not(.bg-transparent), select, textarea {
   border-radius: 10px !important;
-  background-color: rgba(255, 255, 255, 0.015) !important;
-  border: 1px solid rgba(255, 255, 255, 0.045) !important;
+  background-color: var(--color-surface) !important;
+  border: 1px solid var(--color-border) !important;
   color: var(--color-textPrimary) !important;
-  transition: border-color 0.15s ease-in-out, background-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+  transition: border-color 0.15s ease-in-out, background-color 0.15s ease-in-out;
 }
 
 input[type="text"]:not(.bg-transparent):focus, input[type="number"]:not(.bg-transparent):focus, input[type="password"]:not(.bg-transparent):focus, input[type="email"]:not(.bg-transparent):focus, input[type="numeric"]:not(.bg-transparent):focus, select:focus, textarea:focus {
-  border-color: rgba(27, 142, 255, 0.45) !important;
-  background-color: rgba(255, 255, 255, 0.025) !important;
-  box-shadow: 0 0 0 3px rgba(27, 142, 255, 0.08) !important;
+  border-color: var(--color-textMuted) !important;
+  background-color: var(--color-surfaceElevated) !important;
   outline: none !important;
 }
 
@@ -570,29 +563,28 @@ button[aria-label="Назад"]:hover, button[aria-label="Back"]:hover {
    Live / Realtime Indicators
    ========================================== */
 
-@keyframes live-pulse {
-  0%, 100% { box-shadow: 0 0 0 3px rgba(0, 210, 106, 0.2); opacity: 1; }
-  50% { box-shadow: 0 0 0 6px rgba(0, 210, 106, 0.04); opacity: 0.8; }
+@keyframes live-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
 }
 .live-dot {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
   background: var(--color-up);
   flex-shrink: 0;
-  animation: live-pulse 2.4s ease-in-out infinite;
+  animation: live-blink 2s ease-in-out infinite;
 }
 .live-badge {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 1px 7px;
-  border-radius: 999px;
-  background: rgba(0, 210, 106, 0.08);
-  border: 1px solid rgba(0, 210, 106, 0.15);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.07em;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(0, 210, 106, 0.06);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--color-up);
   line-height: 1.6;
@@ -632,8 +624,8 @@ button[aria-label="Назад"]:hover, button[aria-label="Back"]:hover {
 
 /* Sidebar glass surface */
 .sidebar-glass {
-  background: color-mix(in oklab, var(--color-background) 94%, var(--color-surface));
-  border-right: 1px solid rgba(255, 255, 255, 0.04);
+  background: var(--color-surface);
+  border-right: 1px solid var(--color-border);
 }
 
 /* Value flash (used for realtime updates) */
@@ -644,10 +636,10 @@ button[aria-label="Назад"]:hover, button[aria-label="Back"]:hover {
   animation: flash-down var(--duration-flash) var(--ease-modal) forwards;
 }
 
-/* Realtime glow on cards when updated */
+/* Realtime flash on cards when updated (flat, no glow) */
 @keyframes realtime-card-pulse {
-  0% { box-shadow: 0 0 0 1px rgba(43, 130, 246, 0.4); }
-  100% { box-shadow: 0 0 0 1px transparent; }
+  0% { background-color: var(--color-surfaceElevated); }
+  100% { background-color: transparent; }
 }
 .realtime-updated {
   animation: realtime-card-pulse 600ms var(--ease-modal) forwards;

@@ -160,13 +160,13 @@ export default function CryptoBannerWidget() {
   }, [ids]);
 
   return (
-    <div className="mt-3 rounded-xl bg-[#0e111a] border border-white/[0.04] overflow-hidden">
-      <div className="px-3 pt-2.5 pb-1.5 flex items-center justify-between border-b border-white/[0.03]">
+    <div className="mt-3 rounded-xl bg-card border border-border overflow-hidden">
+      <div className="px-3 pt-2.5 pb-1.5 flex items-center justify-between hairline-bottom">
         <div className="text-[10px] font-semibold text-textMuted uppercase tracking-wider">Market</div>
-        <div className="text-[9px] text-textMuted/80 font-mono">{loading ? '…' : 'Live'}</div>
+        <div className={`text-[9px] font-mono ${loading ? 'text-textMuted' : 'text-up'}`}>{loading ? '…' : 'Live'}</div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-white/[0.03]">
+      <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-y divide-border/50">
         {COINS.map((coin) => {
           const row = data?.[coin.id];
           const price = row?.current_price;
@@ -177,21 +177,17 @@ export default function CryptoBannerWidget() {
 
           const accent = (() => {
             switch (coin.ticker) {
-              case 'BTC':
-                return { stroke: 'rgba(212, 168, 75, 0.85)', glow: 'rgba(212, 168, 75, 0.08)' };
-              case 'ETH':
-                return { stroke: 'rgba(130, 140, 200, 0.85)', glow: 'rgba(130, 140, 200, 0.08)' };
-              case 'NVDA':
-                return { stroke: 'rgba(0, 214, 156, 0.75)', glow: 'rgba(0, 214, 156, 0.06)' };
-              default:
-                return { stroke: 'rgba(148, 163, 184, 0.8)', glow: 'rgba(148, 163, 184, 0.07)' };
+              case 'BTC': return { stroke: 'rgba(212,168,75,0.9)' };
+              case 'ETH': return { stroke: 'rgba(130,140,200,0.9)' };
+              case 'NVDA': return { stroke: 'rgba(0,214,156,0.8)' };
+              default: return { stroke: 'rgba(148,163,184,0.85)' };
             }
           })();
 
           return (
             <div
               key={coin.id}
-              className="bg-[#0e111a] px-2.5 py-2.5 relative overflow-hidden hover:bg-[#121622] transition-colors"
+              className="bg-card px-2.5 py-2.5 hover:bg-surfaceElevated transition-colors"
             >
 
               <div className="flex items-center justify-between gap-1.5">
@@ -199,7 +195,7 @@ export default function CryptoBannerWidget() {
                   <img
                     src={coin.logoUrl}
                     alt=""
-                    className="h-5 w-5 rounded-full bg-black/50 object-contain ring-1 ring-white/[0.06]"
+                    className="h-5 w-5 rounded-full bg-surface object-contain"
                     loading="lazy"
                     decoding="async"
                     referrerPolicy="no-referrer"
@@ -227,19 +223,11 @@ export default function CryptoBannerWidget() {
                 </div>
               </div>
 
-              <div className="mt-1.5 opacity-90">
+              <div className="mt-1.5">
                 <svg width="100%" height="22" viewBox="0 0 120 22" preserveAspectRatio="none" aria-hidden="true">
                   <polyline
                     fill="none"
-                    stroke="rgba(255,255,255,0.028)"
-                    strokeWidth="6"
-                    strokeLinejoin="round"
-                    strokeLinecap="round"
-                    points={sparklinePoints(spark, 120, 22, 2)}
-                  />
-                  <polyline
-                    fill="none"
-                    stroke={typeof change === 'number' ? (up ? accent.stroke : 'rgba(220, 90, 90, 0.8)') : accent.stroke}
+                    stroke={typeof change === 'number' ? (up ? accent.stroke : 'rgba(246,70,93,0.85)') : accent.stroke}
                     strokeWidth="1.5"
                     strokeLinejoin="round"
                     strokeLinecap="round"

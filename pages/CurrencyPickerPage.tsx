@@ -77,7 +77,7 @@ const CurrencyPickerPage: React.FC<CurrencyPickerPageProps> = ({ onBack }) => {
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           placeholder={t('search_placeholder')}
-          className="w-full pl-10 pr-4 py-2.5 rounded-lg bg-white/[0.04] border border-white/10 text-white placeholder:text-neutral-500 text-sm focus:outline-none focus:border-neon/50 focus:ring-1 focus:ring-neon/30"
+          className="w-full pl-10 pr-4 py-2.5 rounded-lg bg-surface border border-border text-textPrimary placeholder:text-textMuted text-sm focus:outline-none focus:border-textMuted"
         />
       </div>
 
@@ -99,7 +99,7 @@ const CurrencyPickerPage: React.FC<CurrencyPickerPageProps> = ({ onBack }) => {
                 className={`
                   flex items-center justify-between py-3 px-3 rounded-lg text-left
                   transition-colors active:scale-[0.99]
-                  ${isSelected ? 'bg-neon/20 text-neon border border-neon/40' : 'bg-white/[0.02] text-white hover:bg-white/[0.06] border border-transparent'}
+                  ${isSelected ? 'bg-surfaceElevated text-textPrimary border border-border' : 'bg-surface text-textPrimary hover:bg-surfaceElevated border border-transparent'}
                 `}
               >
                 <div className="flex flex-col items-start">

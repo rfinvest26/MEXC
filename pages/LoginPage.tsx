@@ -4,6 +4,13 @@ import AuthFullScreenLayout from '../components/AuthFullScreenLayout';
 import BottomSheet from '../components/BottomSheet';
 import { useWebAuth } from '../context/WebAuthContext';
 import { useToast } from '../context/ToastContext';
+import {
+  isValidEmail,
+  AUTH_INPUT_CLASS as inputClass,
+  AUTH_INPUT_ERROR_CLASS as errorInputClass,
+  AUTH_LABEL_CLASS as labelClass,
+  AUTH_SUBMIT_CLASS as submitClass,
+} from '../utils/authForm';
 
 interface LoginPageProps {
   onBack: () => void;
@@ -11,15 +18,6 @@ interface LoginPageProps {
   onGoRegister?: () => void;
   onGoSupport?: () => void;
 }
-
-function isValidEmail(s: string) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim().toLowerCase());
-}
-
-const inputClass =
-  'w-full h-12 px-0 bg-transparent border-b border-white/[0.15] text-[15px] text-white placeholder-neutral-500 outline-none transition-all focus:border-neon rounded-none';
-
-const errorInputClass = 'border-red-500 focus:border-red-500';
 
 const LoginPage: React.FC<LoginPageProps> = ({ onBack, onSuccess, onGoRegister, onGoSupport }) => {
   const { login, resendEmailConfirmation } = useWebAuth();
@@ -76,7 +74,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onBack, onSuccess, onGoRegister, 
       >
         <form onSubmit={handleSubmit} className="space-y-6 mt-4">
           <div>
-            <label className="block text-[13px] font-medium text-neutral-400 mb-1">Email</label>
+            <label className={labelClass}>Email</label>
             <input
               id="login-email"
               type="email"
@@ -87,11 +85,11 @@ const LoginPage: React.FC<LoginPageProps> = ({ onBack, onSuccess, onGoRegister, 
               placeholder="Please enter your email"
               className={`${inputClass} ${emailError ? errorInputClass : ''}`}
             />
-            {emailError ? <p className="mt-1.5 text-[12px] text-red-500">{emailError}</p> : null}
+            {emailError ? <p className="mt-1.5 text-[12px] text-down">{emailError}</p> : null}
           </div>
 
           <div>
-            <label className="block text-[13px] font-medium text-neutral-400 mb-1">Password</label>
+            <label className={labelClass}>Password</label>
             <input
               id="login-pass"
               type="password"
@@ -101,7 +99,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onBack, onSuccess, onGoRegister, 
               placeholder="Please enter your password"
               className={`${inputClass} ${passError ? errorInputClass : ''}`}
             />
-            {passError ? <p className="mt-1.5 text-[12px] text-red-500">{passError}</p> : null}
+            {passError ? <p className="mt-1.5 text-[12px] text-down">{passError}</p> : null}
           </div>
 
           <div className="flex justify-end pt-2">
@@ -115,8 +113,8 @@ const LoginPage: React.FC<LoginPageProps> = ({ onBack, onSuccess, onGoRegister, 
           </div>
 
           {isEmailConfirmError && (
-            <div className="rounded-xl bg-neon/10 border border-neon/20 px-4 py-3 mt-4">
-              <p className="text-[13px] text-white">{loginError}</p>
+            <div className="rounded-xl bg-card border border-border px-4 py-3 mt-4">
+              <p className="text-[13px] text-textPrimary">{loginError}</p>
               <button
                 type="button"
                 disabled={resending || !resendEmailConfirmation}
@@ -135,17 +133,13 @@ const LoginPage: React.FC<LoginPageProps> = ({ onBack, onSuccess, onGoRegister, 
           )}
 
           <div className="pt-4">
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full h-[46px] rounded bg-neon text-white text-[16px] font-bold hover:bg-neon/90 active:bg-neon/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-            >
+            <button type="submit" disabled={loading} className={submitClass}>
               {loading ? <Loader2 className="animate-spin" size={18} /> : null}
               Log In
             </button>
           </div>
 
-          <p className="text-center text-[13px] text-neutral-400 pt-6">
+          <p className="text-center text-[13px] text-textSecondary pt-6">
             Don't have an account?{' '}
             <button type="button" className="text-neon font-medium" onClick={onGoRegister}>
               Sign Up
@@ -160,7 +154,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onBack, onSuccess, onGoRegister, 
         title="Forgot Password"
         closeOnBackdrop
       >
-        <p className="text-[14px] text-neutral-400 leading-relaxed mb-6">
+        <p className="text-[14px] text-textSecondary leading-relaxed mb-6">
           To reset your password, please contact our support team.
         </p>
         <button
@@ -169,7 +163,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onBack, onSuccess, onGoRegister, 
             setShowForgotSheet(false);
             onGoSupport?.();
           }}
-          className="w-full h-12 rounded bg-neon text-white text-[15px] font-bold hover:bg-neon/90 transition-colors"
+          className="w-full h-12 rounded-xl bg-neon text-white text-[15px] font-bold hover:opacity-90 transition-opacity"
         >
           Contact Support
         </button>

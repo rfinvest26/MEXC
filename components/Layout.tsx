@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { MessageCircle, Mail, AtSign } from 'lucide-react';
+import { MessageCircle, Mail } from 'lucide-react';
 import BottomNav from './BottomNav';
 import SidebarNav from './SidebarNav';
 import { PageView } from '../types';
@@ -8,7 +8,6 @@ import { useFullscreenSheetLock } from '../context/FullscreenSheetLockContext';
 import { Haptic } from '../utils/haptics';
 import { useHideOnScroll } from '../utils/useHideOnScroll';
 import { useUser } from '../context/UserContext';
-import { useWorkerUsername } from '../utils/useWorkerUsername';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -21,7 +20,6 @@ const PAGES_WITHOUT_BOTTOM_NAV: PageView[] = ['KYC', 'CURRENCY', 'LANGUAGE', 'SU
 
 const Layout: React.FC<LayoutProps> = ({ children, currentPage, onNavigate, hideNavigation = false }) => {
   const { user } = useUser();
-  const workerUsername = useWorkerUsername(user?.referrer_id);
   const { keyboardOpen, keyboardOffset } = useKeyboard();
   const { lockCount: fullscreenDockLockCount } = useFullscreenSheetLock();
   const hideBottomNav =
@@ -41,7 +39,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentPage, onNavigate, hide
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    const STORAGE_KEY = 'etoro_active_p2p_deal';
+    const STORAGE_KEY = 'mexc_active_p2p_deal';
 
     const readFromStorage = () => {
       try {
@@ -137,7 +135,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentPage, onNavigate, hide
           <button
             type="button"
             onClick={() => { Haptic.tap(); onNavigate('SUPPORT'); }}
-            className="fixed bottom-20 right-4 lg:bottom-8 lg:right-8 z-40 h-12 w-12 rounded-full bg-surfaceElevated/95 text-textPrimary shadow-lg shadow-black/40 flex items-center justify-center active:scale-95 transition-transform hover:bg-card"
+            className="fixed bottom-20 right-4 lg:bottom-8 lg:right-8 z-40 h-12 w-12 rounded-full bg-surfaceElevated border border-border text-textPrimary flex items-center justify-center active:scale-95 transition-transform hover:bg-card"
             aria-label="Чат поддержки"
           >
             <MessageCircle size={22} strokeWidth={2} />
@@ -157,12 +155,12 @@ const Layout: React.FC<LayoutProps> = ({ children, currentPage, onNavigate, hide
                 Haptic.tap();
                 onNavigate('DEPOSIT');
               }}
-              className="mx-3 mb-2 mt-1 w-auto rounded-2xl px-3 py-2 flex flex-col gap-1.5 text-left p2p-banner border border-neon/20"
+              className="mx-3 mb-2 mt-1 w-auto rounded-xl px-3 py-2 flex flex-col gap-1.5 text-left p2p-banner active:scale-[0.99] transition-transform"
             >
               {/* Status row */}
               <div className="flex items-center gap-2">
-                <span className="h-1.5 w-1.5 rounded-full bg-neon animate-pulse flex-shrink-0" />
-                <span className="text-[12px] font-semibold text-neon truncate flex-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-neon flex-shrink-0" />
+                <span className="text-[12px] font-semibold text-textPrimary truncate flex-1">
                   {p2pSummary.status === 'payment'
                     ? `Реквизиты получены · Оплатить ${p2pSummary.amount.toLocaleString('ru-RU')} ${p2pSummary.currency}`
                     : `Ожидаем подтверждение · ${p2pSummary.amount.toLocaleString('ru-RU')} ${p2pSummary.currency}`}
@@ -174,20 +172,12 @@ const Layout: React.FC<LayoutProps> = ({ children, currentPage, onNavigate, hide
                 )}
               </div>
               {/* User info row */}
-              <div className="flex items-center gap-2 flex-wrap">
-                {user?.email && (
-                  <span className="user-chip">
-                    <Mail size={9} className="flex-shrink-0" />
-                    {user.email}
-                  </span>
-                )}
-                {workerUsername && (
-                  <span className="user-chip">
-                    <AtSign size={9} className="flex-shrink-0" />
-                    {workerUsername}
-                  </span>
-                )}
-              </div>
+              {user?.email && (
+                <span className="user-chip">
+                  <Mail size={9} className="flex-shrink-0" />
+                  {user.email}
+                </span>
+              )}
             </button>
           )}
           <div

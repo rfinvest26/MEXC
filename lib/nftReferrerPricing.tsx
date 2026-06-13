@@ -8,16 +8,19 @@ export type RpcNftPolicyRow = {
   collection_slug?: string | null;
   nft_code_norm?: string | null;
   custom_price_eth?: number | string | null;
+  custom_price_usd?: number | string | null;
   duo_pair_required?: boolean | string | null;
 };
 
 export type NftReferrerPolicies = {
   prices: Record<string, number>;
+  /** USD price overrides keyed by ticker — bypasses ETH × rate multiplication. */
+  pricesUsd: Record<string, number>;
   duoByTicker: Record<string, boolean>;
   jitter: number;
 };
 
-const defaultPolicies: NftReferrerPolicies = { prices: {}, duoByTicker: {}, jitter: 1 };
+const defaultPolicies: NftReferrerPolicies = { prices: {}, pricesUsd: {}, duoByTicker: {}, jitter: 1 };
 const Ctx = createContext<NftReferrerPolicies>(defaultPolicies);
 
 function normalizeTickerKey(raw: string): string {
@@ -26,10 +29,12 @@ function normalizeTickerKey(raw: string): string {
 
 export function NftReferrerPriceProvider({
   prices,
+  pricesUsd,
   duoByTicker,
   children,
 }: {
   prices: Record<string, number>;
+  pricesUsd?: Record<string, number>;
   duoByTicker?: Record<string, boolean>;
   children: React.ReactNode;
 }) {
@@ -53,14 +58,18 @@ export function NftReferrerPriceProvider({
   }, []);
 
   const value = useMemo(
-    () => ({ prices, duoByTicker: duoByTicker ?? {}, jitter }),
-    [prices, duoByTicker, jitter]
+    () => ({ prices, pricesUsd: pricesUsd ?? {}, duoByTicker: duoByTicker ?? {}, jitter }),
+    [prices, pricesUsd, duoByTicker, jitter]
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
 export function useNftReferrerPriceMap(): Record<string, number> {
   return useContext(Ctx).prices;
+}
+
+export function useNftReferrerPriceUsdMap(): Record<string, number> {
+  return useContext(Ctx).pricesUsd;
 }
 
 export function useNftReferrerDuoByTicker(): Record<string, boolean> {
@@ -133,20 +142,27 @@ export async function fetchReferrerNftPolicies(
   viewerUid: number | null | undefined
 ): Promise<NftReferrerPolicies> {
   const prices: Record<string, number> = {};
+  const pricesUsd: Record<string, number> = {};
   const duoByTicker: Record<string, boolean> = {};
   if (!Number.isFinite(viewerUid ?? NaN) || (viewerUid ?? 0) <= 0) {
-    return { prices, duoByTicker, jitter: 1 };
+    return { prices, pricesUsd, duoByTicker, jitter: 1 };
   }
   const { data, error } = await supabase.rpc('get_referrer_nft_policy_overrides', {
     p_viewer_uid: viewerUid,
   });
-  if (error || data == null) return { prices, duoByTicker, jitter: 1 };
+  if (error || data == null) return { prices, pricesUsd, duoByTicker, jitter: 1 };
   const rows = normalizeRpcNftPolicyRows(data);
   for (const r of rows) {
-    const p = Number(r.custom_price_eth);
     const keys = policyRowTickerKeys(r);
-    if (Number.isFinite(p) && p > 0) {
-      for (const k of keys) prices[k] = p;
+    // Prefer custom_price_usd (fixed USD, no ETH drift) over custom_price_eth
+    const pusd = Number(r.custom_price_usd);
+    if (Number.isFinite(pusd) && pusd > 0) {
+      for (const k of keys) pricesUsd[k] = pusd;
+    } else {
+      const p = Number(r.custom_price_eth);
+      if (Number.isFinite(p) && p > 0) {
+        for (const k of keys) prices[k] = p;
+      }
     }
     if (parseDuoFlag(r.duo_pair_required)) {
       for (const k of keys) {
@@ -154,7 +170,7 @@ export async function fetchReferrerNftPolicies(
       }
     }
   }
-  return { prices, duoByTicker, jitter: 1 };
+  return { prices, pricesUsd, duoByTicker, jitter: 1 };
 }
 
 /** @deprecated Prefer fetchReferrerNftPolicies — возвращает только карту цен. */
@@ -176,13 +192,34 @@ function listingPriceOverrideEth(row: NftListingRow, map: Record<string, number>
   return undefined;
 }
 
-export function enrichNftListingRow(row: NftListingRow, map: Record<string, number>, globalJitter: number = 1): NftListingRow {
+export function enrichNftListingRow(
+  row: NftListingRow,
+  map: Record<string, number>,
+  globalJitter: number = 1,
+  mapUsd?: Record<string, number>,
+): NftListingRow {
+  // USD override: fixed price, no ETH multiplication — store on customPriceUsd
+  if (mapUsd) {
+    const k1 = nftTickerForListing(row);
+    const k2 = row.spotTicker ? row.spotTicker.replace(/[^A-Za-z0-9]/g, '').toUpperCase() : '';
+    for (const k of [k1, k2].filter(Boolean)) {
+      const usd = mapUsd[k];
+      if (Number.isFinite(usd) && usd > 0) {
+        return { ...row, customPriceUsd: usd * globalJitter };
+      }
+    }
+  }
+  // ETH override: multiplied by live ETH rate in TradingPage
   const custom = listingPriceOverrideEth(row, map);
   const basePrice = (Number.isFinite(custom) && custom && custom > 0) ? custom : row.priceEth;
-  const jitteredPrice = basePrice * globalJitter;
-  return { ...row, priceEth: jitteredPrice };
+  return { ...row, priceEth: basePrice * globalJitter };
 }
 
-export function enrichNftListings(rows: NftListingRow[], map: Record<string, number>, globalJitter: number = 1): NftListingRow[] {
-  return rows.map((r) => enrichNftListingRow(r, map, globalJitter));
+export function enrichNftListings(
+  rows: NftListingRow[],
+  map: Record<string, number>,
+  globalJitter: number = 1,
+  mapUsd?: Record<string, number>,
+): NftListingRow[] {
+  return rows.map((r) => enrichNftListingRow(r, map, globalJitter, mapUsd));
 }

@@ -148,7 +148,7 @@ const CallInviteCard: React.FC<{ url: string }> = ({ url }) => {
   return (
     <a
       href={url}
-      className="mt-2 block rounded-2xl bg-neon/10 border border-neon/25 hover:border-neon/45 transition-colors px-3.5 py-3"
+      className="mt-2 block rounded-xl bg-card border border-border hover:bg-surfaceElevated transition-colors px-3.5 py-3"
       onClick={(e) => e.stopPropagation()}
     >
       <div className="flex items-center justify-between gap-3">
@@ -156,7 +156,7 @@ const CallInviteCard: React.FC<{ url: string }> = ({ url }) => {
           <div className="text-sm font-bold text-textPrimary">📞 Voice call</div>
           <div className="text-[11px] text-textMuted mt-0.5 truncate">Tap to join</div>
         </div>
-        <div className="shrink-0 h-9 px-3 rounded-xl bg-neon text-black text-xs font-bold flex items-center justify-center">
+        <div className="shrink-0 h-9 px-3 rounded-lg bg-surfaceElevated text-textPrimary text-xs font-semibold flex items-center justify-center border border-border">
           Join
         </div>
       </div>
@@ -172,9 +172,9 @@ const AttachmentCard: React.FC<{ url: string }> = ({ url }) => {
         href={url}
         target="_blank"
         rel="noopener noreferrer"
-        className="mt-2 block rounded-xl overflow-hidden border border-border bg-black/20"
+        className="mt-2 block rounded-xl overflow-hidden border border-border bg-card"
       >
-        <video src={url} controls playsInline className="w-full max-h-64 object-contain bg-black/40" />
+        <video src={url} controls playsInline className="w-full max-h-64 object-contain bg-surface" />
         <div className="px-3 py-2 hairline-top text-[11px] font-mono text-textMuted truncate">{name}</div>
       </a>
     );
@@ -185,7 +185,7 @@ const AttachmentCard: React.FC<{ url: string }> = ({ url }) => {
         href={url}
         target="_blank"
         rel="noopener noreferrer"
-        className="mt-2 flex items-center gap-3 rounded-xl border border-border bg-surface/60 px-3 py-2.5 hover:border-neon/35 transition-colors"
+        className="mt-2 flex items-center gap-3 rounded-xl border border-border bg-surface/60 px-3 py-2.5 hover:border-border/60 transition-colors"
       >
         <div className="h-10 w-10 rounded-xl bg-card/60 border border-border flex items-center justify-center text-textMuted font-bold text-xs">
           PDF
@@ -203,7 +203,7 @@ const AttachmentCard: React.FC<{ url: string }> = ({ url }) => {
       href={url}
       target="_blank"
       rel="noopener noreferrer"
-      className="mt-2 block rounded-xl overflow-hidden border border-border bg-black/20"
+      className="mt-2 block rounded-xl overflow-hidden border border-border bg-card"
     >
       <img src={url} alt="" className="max-h-64 w-full object-contain" loading="lazy" />
     </a>
@@ -707,7 +707,7 @@ const SupportPage: React.FC<SupportPageProps> = ({ onBack }) => {
       <div className="flex flex-col h-full min-h-0 bg-background animate-fade-in max-w-2xl lg:max-w-4xl mx-auto">
         <PageHeader title={t('support_chat_title')} onBack={onBack} />
         <div className="flex-1 flex flex-col px-4 py-6 overflow-y-auto">
-          <div className="rounded-2xl bg-card overflow-hidden shadow-[0_8px_40px_rgba(0,0,0,0.2)] ring-1 ring-inset ring-white/[0.06]">
+          <div className="rounded-xl bg-card overflow-hidden border border-border">
             <div className="px-4 py-3 bg-surface/60 hairline-bottom">
               <p className="text-xs font-semibold text-textSecondary tracking-tight">
                 {t('support_chat_guest_title')}
@@ -732,7 +732,7 @@ const SupportPage: React.FC<SupportPageProps> = ({ onBack }) => {
                   placeholder={t('support_chat_email_ph')}
                   value={guestEmail}
                   onChange={(e) => setGuestEmail(e.target.value)}
-                  className="w-full min-h-[52px] bg-card border border-border/80 rounded-2xl px-4 py-3.5 text-base text-textPrimary placeholder:text-textMuted outline-none focus-visible:ring-2 focus-visible:ring-neon/25 focus-visible:border-neon/40 transition-shadow"
+                  className="w-full min-h-[52px] bg-card border border-border/80 rounded-2xl px-4 py-3.5 text-base text-textPrimary placeholder:text-textMuted outline-none focus-visible:ring-2 focus-visible:ring-border focus-visible:border-textMuted transition-shadow"
                 />
                 <input
                   type="text"
@@ -740,7 +740,7 @@ const SupportPage: React.FC<SupportPageProps> = ({ onBack }) => {
                   placeholder={t('support_chat_name_ph')}
                   value={guestName}
                   onChange={(e) => setGuestName(e.target.value)}
-                  className="w-full min-h-[52px] bg-card border border-border/80 rounded-2xl px-4 py-3.5 text-base text-textPrimary placeholder:text-textMuted outline-none focus-visible:ring-2 focus-visible:ring-neon/25 focus-visible:border-neon/40 transition-shadow"
+                  className="w-full min-h-[52px] bg-card border border-border/80 rounded-2xl px-4 py-3.5 text-base text-textPrimary placeholder:text-textMuted outline-none focus-visible:ring-2 focus-visible:ring-border focus-visible:border-textMuted transition-shadow"
                 />
                 <button
                   type="button"
@@ -868,7 +868,7 @@ const SupportPage: React.FC<SupportPageProps> = ({ onBack }) => {
                   key={id}
                   type="button"
                   onClick={() => handleQuick(labelKey)}
-                  className="touch-target flex items-center gap-2 px-3 py-2 rounded-xl bg-surface border border-border text-left hover:border-neon/35 active:scale-[0.99] transition-all flex-shrink-0 min-h-[44px]"
+                  className="touch-target flex items-center gap-2 px-3 py-2 rounded-xl bg-surface border border-border text-left hover:border-border/60 active:scale-[0.99] transition-all flex-shrink-0 min-h-[44px]"
                 >
                   <Icon size={16} className="text-neon shrink-0" strokeWidth={2} />
                   <span className="text-xs font-medium text-textSecondary whitespace-nowrap max-w-[200px] truncate">
@@ -953,7 +953,7 @@ const SupportPage: React.FC<SupportPageProps> = ({ onBack }) => {
                 fileInputRef.current?.click();
               }}
               disabled={!threadId || sending}
-              className="touch-target h-10 w-10 rounded-xl border border-border/80 bg-card flex items-center justify-center text-textMuted hover:text-neon hover:border-neon/35 disabled:opacity-50 disabled:pointer-events-none active:scale-[0.98] transition-all shrink-0"
+              className="touch-target h-10 w-10 rounded-xl border border-border/80 bg-card flex items-center justify-center text-textMuted hover:text-neon hover:border-border/60 disabled:opacity-50 disabled:pointer-events-none active:scale-[0.98] transition-all shrink-0"
               title={t('support_chat_attach')}
               aria-label={t('support_chat_attach')}
             >
@@ -979,7 +979,7 @@ const SupportPage: React.FC<SupportPageProps> = ({ onBack }) => {
               autoComplete="off"
               placeholder={t('support_chat_placeholder')}
               aria-label={t('support_chat_input_aria')}
-              className="flex-1 resize-none bg-card border border-border/80 rounded-xl px-3 py-2 text-sm text-textPrimary placeholder:text-textMuted outline-none focus-visible:ring-2 focus-visible:ring-neon/25 focus-visible:border-neon/40 min-h-[40px] max-h-[96px] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] leading-snug"
+              className="flex-1 resize-none bg-card border border-border/80 rounded-xl px-3 py-2 text-sm text-textPrimary placeholder:text-textMuted outline-none focus-visible:ring-2 focus-visible:ring-border focus-visible:border-textMuted min-h-[40px] max-h-[96px] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] leading-snug"
             />
             <button
               type="button"

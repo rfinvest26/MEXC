@@ -20,21 +20,20 @@ const UnifiedMarketsRibbon: React.FC = () => {
   }, [live]);
 
   if (items.length === 0) {
-    return <div className="mx-2 mb-2 h-16 rounded-lg bg-black/20 border border-white/[0.06] animate-pulse" aria-hidden />;
+    return <div className="mx-2 mb-2 h-16 rounded-lg bg-surface animate-pulse" aria-hidden />;
   }
 
   return (
     <div className="px-2 pb-3">
       <div className="flex items-center gap-1.5 mb-1.5 px-1">
         <span className="text-[10px] text-textMuted uppercase tracking-wide font-semibold">{t('last_trades')}</span>
-        <span className="live-dot ml-auto" />
       </div>
-      <div className="flex flex-col gap-1 rounded-xl bg-black/20 border border-white/[0.06] p-1.5">
+      <div className="flex flex-col rounded-lg bg-surface border border-border overflow-hidden">
         {items.map((a) => {
           const ch = a.change24h ?? 0;
           const up = ch >= 0;
           return (
-            <div key={a.id} className="flex items-center justify-between gap-2 px-1.5 py-1 rounded-lg hover:bg-white/[0.04]">
+            <div key={a.id} className="flex items-center justify-between gap-2 px-2.5 py-1.5 hover:bg-surfaceElevated hairline-bottom last:border-b-0 transition-colors">
               <span className="text-xs font-mono font-bold text-textPrimary w-10 shrink-0">{a.ticker}</span>
               <span className="text-[11px] font-mono text-textSubtle tabular-nums truncate min-w-0">
                 {formatPrice(a.price)} {symbol}

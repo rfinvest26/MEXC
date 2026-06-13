@@ -4,7 +4,7 @@ import { useLanguage } from '../context/LanguageContext';
 import { useCurrency } from '../context/CurrencyContext';
 import { fetchAssetPricesInUsd } from '../lib/cryptoPrices';
 import { getNftListingsForCollection, nftListingToAsset, nftTickerForListing, type NftListingRow } from '../lib/nftCatalog';
-import { enrichNftListingRow, enrichNftListings, useNftReferrerPriceMap, useNftMarketJitter } from '../lib/nftReferrerPricing';
+import { enrichNftListingRow, enrichNftListings, useNftReferrerPriceMap, useNftReferrerPriceUsdMap, useNftMarketJitter } from '../lib/nftReferrerPricing';
 import { withNftDisplayWobbleUsd } from '../utils/nftPriceWobble';
 import type { Asset } from '../types';
 import { Haptic } from '../utils/haptics';
@@ -41,11 +41,12 @@ const NFTDetailPage: React.FC<NFTDetailPageProps> = ({ listing, onBack, onTrade 
   const { t } = useLanguage();
   const { formatPrice, currencyCode } = useCurrency();
   const refPrices = useNftReferrerPriceMap();
+  const refPricesUsd = useNftReferrerPriceUsdMap();
   const [display, setDisplay] = useState(listing);
   const jitter = useNftMarketJitter();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-  const pricedRow = useMemo(() => enrichNftListingRow(display, refPrices, jitter), [display, refPrices, jitter]);
+  const pricedRow = useMemo(() => enrichNftListingRow(display, refPrices, jitter, refPricesUsd), [display, refPrices, refPricesUsd, jitter]);
 
   useEffect(() => {
     setDisplay(listing);
@@ -53,7 +54,7 @@ const NFTDetailPage: React.FC<NFTDetailPageProps> = ({ listing, onBack, onTrade 
 
   // Siblings enriched with current ref prices and jitter
   const siblings = useMemo(
-    () => enrichNftListings(getNftListingsForCollection(display.collectionSlug), refPrices, jitter),
+    () => enrichNftListings(getNftListingsForCollection(display.collectionSlug), refPrices, jitter, refPricesUsd),
     [display.collectionSlug, refPrices, jitter]
   );
   const index = siblings.findIndex((s) => s.codeKey === display.codeKey);
@@ -83,9 +84,11 @@ const NFTDetailPage: React.FC<NFTDetailPageProps> = ({ listing, onBack, onTrade 
   }, []);
 
   const nftSpotTicker = useMemo(() => nftTickerForListing(pricedRow), [pricedRow.collectionSlug, pricedRow.codeKey]);
-  const baselineUsd = ethUsdSpot > 0
-    ? pricedRow.priceEth * ethUsdSpot
-    : Math.max(pricedRow.priceEth * 320_000, 1);
+  const baselineUsd = pricedRow.customPriceUsd != null && pricedRow.customPriceUsd > 0
+    ? pricedRow.customPriceUsd
+    : ethUsdSpot > 0
+      ? pricedRow.priceEth * ethUsdSpot
+      : Math.max(pricedRow.priceEth * 3000, 1);
 
   const priceUsd = useMemo(() => {
     void wobblePulse;
@@ -166,8 +169,8 @@ const NFTDetailPage: React.FC<NFTDetailPageProps> = ({ listing, onBack, onTrade 
         className="flex-1 overflow-y-auto no-scrollbar pb-[calc(5.75rem+env(safe-area-inset-bottom,0px))] max-w-2xl w-full mx-auto"
       >
         <div className="px-4 pt-2">
-          <div className="rounded-xl overflow-hidden bg-black/30 mx-auto max-h-[38vh] sm:max-h-[42vh]">
-            <div className="aspect-[1] max-h-[38vh] sm:max-h-[42vh] bg-black/45 relative mx-auto">
+          <div className="rounded-xl overflow-hidden bg-card mx-auto max-h-[38vh] sm:max-h-[42vh]">
+            <div className="aspect-[1] max-h-[38vh] sm:max-h-[42vh] bg-card relative mx-auto">
               <img
                 key={display.codeKey}
                 src={display.imageUrl}
@@ -182,7 +185,7 @@ const NFTDetailPage: React.FC<NFTDetailPageProps> = ({ listing, onBack, onTrade 
         </div>
 
         <div className="px-4 mt-4 space-y-3">
-          <div className="flex items-center gap-2 sm:gap-3 pt-0.5 pb-3 border-b border-white/[0.06]">
+          <div className="flex items-center gap-2 sm:gap-3 pt-0.5 pb-3 border-b border-border">
             <div className="flex flex-1 min-w-0 items-start justify-between gap-2">
               <div className="min-w-0">
                 <div className="text-[10px] text-textMuted uppercase tracking-wider font-semibold">{t('nft_list_price_eth')}</div>
@@ -205,7 +208,7 @@ const NFTDetailPage: React.FC<NFTDetailPageProps> = ({ listing, onBack, onTrade 
           </div>
 
           {/* Order book */}
-          <div className="relative left-1/2 -translate-x-1/2 w-screen max-w-[100vw] border-t border-b border-white/[0.06] bg-background/40">
+          <div className="relative left-1/2 -translate-x-1/2 w-screen max-w-[100vw] border-t border-b border-border bg-background/40">
             <div className="flex justify-between px-4 pt-2.5 pb-1 text-[10px] text-textMuted uppercase tracking-wider font-semibold">
               <span>{t('order_book_price')}</span>
               <span>{t('order_book_size')} (ETH)</span>
@@ -222,7 +225,7 @@ const NFTDetailPage: React.FC<NFTDetailPageProps> = ({ listing, onBack, onTrade 
                 </div>
               ))}
             </div>
-            <div className="py-2 flex flex-col items-center bg-black/20">
+            <div className="py-2 flex flex-col items-center bg-surface">
               <span className="text-sm font-mono font-bold text-textPrimary">{formatPrice(priceUsd)}</span>
               <span className="text-[8px] text-textMuted uppercase">{currencyCode}</span>
             </div>
@@ -246,7 +249,7 @@ const NFTDetailPage: React.FC<NFTDetailPageProps> = ({ listing, onBack, onTrade 
           <p className="text-[10px] text-textMuted leading-relaxed px-0.5 pb-4">{t('nft_spot_disclaimer')}</p>
         </div>
 
-        <div className="mt-4 border-t border-white/[0.05] bg-black/10">
+        <div className="mt-4 border-t border-border">
           <NftHorizontalStrip
             title={t('nft_more_from_collection') || 'More from this collection'}
             items={siblings}

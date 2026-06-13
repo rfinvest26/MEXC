@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ChevronDown, ArrowLeftRight, Loader2, BarChart3, ArrowLeftRight as ConvertIcon } from 'lucide-react';
+import { ChevronDown, Loader2, BarChart3, ArrowLeftRight as ConvertIcon } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import { useCurrency } from '../context/CurrencyContext';
 import { useUser } from '../context/UserContext';
@@ -224,7 +224,7 @@ const ExchangePage: React.FC<ExchangePageProps> = ({
             {t('exchange_mode_futures')}
           </button>
           <div className="flex-1" />
-          <div className="h-9 w-9 rounded-xl bg-white/[0.03] flex items-center justify-center text-textSecondary">
+          <div className="h-9 w-9 rounded-xl bg-surface flex items-center justify-center text-textSecondary">
             <ConvertIcon size={18} strokeWidth={1.75} />
           </div>
         </div>
@@ -241,7 +241,7 @@ const ExchangePage: React.FC<ExchangePageProps> = ({
             <button
               type="button"
               onClick={() => { Haptic.tap(); onGoTrading?.('spot'); onBack(); }}
-              className="touch-target h-9 w-9 rounded-xl flex items-center justify-center text-textSecondary hover:text-textPrimary hover:bg-white/5 active:scale-95 transition-all focus:outline-none"
+              className="touch-target h-9 w-9 rounded-xl flex items-center justify-center text-textSecondary hover:text-textPrimary hover:bg-surfaceElevated active:scale-95 transition-all focus:outline-none"
               aria-label={t('chart_title')}
               title={t('chart_title')}
             >
@@ -254,7 +254,7 @@ const ExchangePage: React.FC<ExchangePageProps> = ({
       <div className="flex-1 overflow-y-auto px-4 py-3 pb-24">
         <div className="max-w-md w-full mx-auto space-y-3">
           {/* Карточка: Отдаю */}
-          <div className="rounded-3xl bg-white/5 overflow-hidden">
+          <div className="rounded-xl bg-card border border-border overflow-hidden">
             <div className="px-3 py-2">
               <p className="text-[11px] font-semibold text-textSubtle">{t('from_label')}</p>
             </div>
@@ -265,7 +265,7 @@ const ExchangePage: React.FC<ExchangePageProps> = ({
                   Haptic.tap();
                   openPicker('from');
                 }}
-                className="touch-target w-full flex items-center justify-between gap-2 py-2.5 px-3 rounded-xl bg-white/[0.02] hover:bg-white/[0.04] transition-all text-left"
+                className="touch-target w-full flex items-center justify-between gap-2 py-2.5 px-3 rounded-xl bg-surface hover:bg-surfaceElevated transition-colors text-left"
               >
                 <div className="min-w-0 flex-1">
                   <p className="font-mono font-semibold text-sm text-textPrimary truncate">{fromLabel}</p>
@@ -281,7 +281,7 @@ const ExchangePage: React.FC<ExchangePageProps> = ({
                 placeholder={isFromCurrency ? `0 ${symbol}` : '0'}
                 value={amount}
                 onChange={(e) => setAmount(sanitizeDecimalInput(e.target.value))}
-                className="w-full bg-white/[0.02] hover:bg-white/[0.03] focus:bg-white/[0.04] rounded-xl px-3 py-2.5 text-textPrimary font-mono text-sm placeholder:text-textMuted focus:outline-none transition-all"
+                className="w-full bg-surface hover:bg-surfaceElevated rounded-xl px-3 py-2.5 text-textPrimary font-mono text-sm placeholder:text-textMuted focus:outline-none focus:bg-surfaceElevated transition-colors border border-border"
               />
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-[10px] font-mono text-textMuted">
@@ -324,7 +324,7 @@ const ExchangePage: React.FC<ExchangePageProps> = ({
           </div>
 
           {/* Карточка: Получаю */}
-          <div className="rounded-3xl bg-white/5 overflow-hidden">
+          <div className="rounded-xl bg-card border border-border overflow-hidden">
             <div className="px-3 py-2">
               <p className="text-[11px] font-semibold text-textSubtle">{t('to_label')}</p>
             </div>
@@ -335,7 +335,7 @@ const ExchangePage: React.FC<ExchangePageProps> = ({
                   Haptic.tap();
                   openPicker('to');
                 }}
-                className="touch-target w-full flex items-center justify-between gap-2 py-2.5 px-3 rounded-xl bg-white/[0.02] hover:bg-white/[0.04] transition-all text-left"
+                className="touch-target w-full flex items-center justify-between gap-2 py-2.5 px-3 rounded-xl bg-surface hover:bg-surfaceElevated transition-colors text-left"
               >
                 <div className="min-w-0 flex-1">
                   <p className="font-mono font-semibold text-sm text-textPrimary truncate">{toLabel}</p>
@@ -348,7 +348,7 @@ const ExchangePage: React.FC<ExchangePageProps> = ({
                 <ChevronDown size={16} className="text-textMuted flex-shrink-0" />
               </button>
               {amount && numAmount > 0 && (
-                <div className="mt-3 rounded-2xl bg-black/25 px-3 py-2 flex items-center justify-between">
+                <div className="mt-3 rounded-lg bg-surface px-3 py-2 flex items-center justify-between">
                   <span className="text-[11px] text-textSubtle font-semibold">{t('you_receive')}</span>
                   <span className="text-[13px] font-mono font-bold text-textPrimary">
                     {resultText}

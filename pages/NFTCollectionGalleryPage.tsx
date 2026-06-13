@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import PageHeader from '../components/PageHeader';
 import { useLanguage } from '../context/LanguageContext';
 import { getNftListingsForCollection, getAllNftListings, type NftListingRow } from '../lib/nftCatalog';
-import { enrichNftListings, useNftReferrerPriceMap, useNftMarketJitter } from '../lib/nftReferrerPricing';
+import { enrichNftListings, useNftReferrerPriceMap, useNftReferrerPriceUsdMap, useNftMarketJitter } from '../lib/nftReferrerPricing';
 import { Haptic } from '../utils/haptics';
 import NftHorizontalStrip from '../components/NftHorizontalStrip';
 
@@ -34,10 +34,11 @@ const NFTCollectionGalleryPage: React.FC<NFTCollectionGalleryPageProps> = ({
   const { t } = useLanguage();
 
   const refPrices = useNftReferrerPriceMap();
+  const refPricesUsd = useNftReferrerPriceUsdMap();
   const jitter = useNftMarketJitter();
 
   const listings = useMemo(
-    () => enrichNftListings(getNftListingsForCollection(collectionSlug), refPrices, jitter),
+    () => enrichNftListings(getNftListingsForCollection(collectionSlug), refPrices, jitter, refPricesUsd),
     [collectionSlug, refPrices, jitter]
   );
 
@@ -96,7 +97,7 @@ const NFTCollectionGalleryPage: React.FC<NFTCollectionGalleryPageProps> = ({
     Number.isFinite(n) ? n.toLocaleString(undefined, { maximumFractionDigits: 4 }) : '—';
 
   const statRow = (label: string, valueMono: React.ReactNode) => (
-    <div className="flex items-baseline justify-between gap-3 border-b border-white/[0.05] pb-1.5 last:border-0 last:pb-0">
+    <div className="flex items-baseline justify-between gap-3 border-b border-border pb-1.5 last:border-0 last:pb-0">
       <span className="text-[10px] text-textMuted shrink-0">{label}</span>
       <span className="text-[11px] font-mono font-semibold text-neon tabular-nums tracking-tight text-right min-w-0 truncate">
         {valueMono}
@@ -120,7 +121,7 @@ const NFTCollectionGalleryPage: React.FC<NFTCollectionGalleryPageProps> = ({
         className={`whitespace-nowrap shrink-0 rounded-full px-3 py-1.5 text-[11px] font-semibold transition-colors ${
           on
             ? 'bg-neon/20 text-neon ring-1 ring-inset ring-neon/35'
-            : 'bg-white/[0.04] text-textSubtle hover:text-textSecondary hover:bg-white/[0.06]'
+            : 'bg-surface text-textSubtle hover:text-textSecondary hover:bg-surfaceElevated'
         }`}
       >
         {label}
@@ -150,8 +151,7 @@ const NFTCollectionGalleryPage: React.FC<NFTCollectionGalleryPageProps> = ({
         <div className="relative z-10 px-4 pt-4 pb-8 flex flex-col items-center text-center">
           {/* Avatar with Glow */}
           <div className="relative mb-6">
-            <div className="absolute inset-0 bg-neon/15 blur-2xl rounded-2xl scale-125" />
-            <div className="relative w-24 h-24 rounded-2xl overflow-hidden border-2 border-white/10 shadow-2xl bg-surface">
+            <div className="relative w-24 h-24 rounded-2xl overflow-hidden border border-border bg-surface">
               <img 
                 src={coverUrl} 
                 alt={collectionName} 
@@ -169,17 +169,17 @@ const NFTCollectionGalleryPage: React.FC<NFTCollectionGalleryPageProps> = ({
           </p>
 
           {/* Stats Row */}
-          <div className="flex items-center gap-4 sm:gap-8 bg-white/[0.03] backdrop-blur-md border border-white/10 rounded-2xl p-4 shadow-xl">
+          <div className="flex items-center gap-4 sm:gap-8 bg-card border border-border rounded-xl p-4">
             <div className="flex flex-col items-center">
               <span className="text-[9px] text-textSubtle uppercase tracking-widest font-bold mb-1">Floor</span>
               <span className="text-sm font-mono font-bold text-neon">{fmtEth(priceRollup.floor)} <span className="text-[10px] text-textMuted">ETH</span></span>
             </div>
-            <div className="w-px h-6 bg-white/10" />
+            <div className="w-px h-6 bg-border" />
             <div className="flex flex-col items-center">
               <span className="text-[9px] text-textSubtle uppercase tracking-widest font-bold mb-1">Items</span>
               <span className="text-sm font-mono font-bold text-white">{itemCount}</span>
             </div>
-            <div className="w-px h-6 bg-white/10" />
+            <div className="w-px h-6 bg-border" />
             <div className="flex flex-col items-center">
               <span className="text-[9px] text-textSubtle uppercase tracking-widest font-bold mb-1">Highest</span>
               <span className="text-sm font-mono font-bold text-white">{fmtEth(priceRollup.high)} <span className="text-[10px] text-textMuted">ETH</span></span>
@@ -208,9 +208,9 @@ const NFTCollectionGalleryPage: React.FC<NFTCollectionGalleryPageProps> = ({
                   onOpenListing(row);
                 }}
                 aria-label={`${collectionName} ${row.codeDisplay}`}
-                className="group rounded-xl overflow-hidden bg-white/[0.03] border border-white/[0.08] shadow-lg shadow-black/30 text-left active:scale-[0.97] transition-all hover:bg-white/[0.05] hover:border-white/[0.12] focus:outline-none"
+                className="group rounded-xl overflow-hidden bg-card border border-border text-left active:scale-[0.97] transition-all hover:bg-surfaceElevated hover:border-border/80 focus:outline-none"
               >
-                <div className="aspect-[4/5] bg-black/40 relative overflow-hidden">
+                <div className="aspect-[4/5] bg-surface relative overflow-hidden">
                   <img
                     src={row.imageUrl}
                     alt=""
@@ -240,10 +240,10 @@ const NFTCollectionGalleryPage: React.FC<NFTCollectionGalleryPageProps> = ({
       </div>
 
       {/* Suggested Other NFTs */}
-      <div className={`mt-8 border-t border-white/[0.05] bg-black/10 ${GALLERY_SCROLL_BOTTOM_PADDING}`}>
+      <div className={`mt-8 border-t border-border ${GALLERY_SCROLL_BOTTOM_PADDING}`}>
         <NftHorizontalStrip 
           title={t('nft_explore_others')}
-          items={enrichNftListings(getAllNftListings().filter(n => n.collectionSlug !== collectionSlug), refPrices, jitter).slice(0, 15)}
+          items={enrichNftListings(getAllNftListings().filter(n => n.collectionSlug !== collectionSlug), refPrices, jitter, refPricesUsd).slice(0, 15)}
           onItemClick={(item) => onOpenListing(item)}
         />
       </div>

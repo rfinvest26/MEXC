@@ -74,8 +74,8 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onNext }) => {
           ) : (
             /* Шаги 1–2: иконка-буква */
             <>
-              <div className="w-16 h-16 rounded-full border border-white/10 flex items-center justify-center mb-12 bg-white/[0.02]">
-                <span className="text-2xl font-bold text-neon tracking-tight">N</span>
+              <div className="w-16 h-16 rounded-full border border-border flex items-center justify-center mb-12 bg-surface">
+                <span className="text-2xl font-bold text-textPrimary tracking-tight">N</span>
               </div>
               <h1 className="text-2xl font-bold text-white text-center mb-2 tracking-tight">
                 {t(current.titleKey)}

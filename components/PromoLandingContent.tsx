@@ -8,7 +8,7 @@ const PromoLandingContent: React.FC<PromoLandingContentProps> = ({ onAction }) =
   return (
     <div className="flex flex-col gap-4 mt-8 pb-32">
       {/* 1. Everyday Airdrops */}
-      <div className="bg-[#11131a] rounded-xl p-5 border border-white/[0.02]">
+      <div className="bg-card rounded-xl p-5 border border-border">
         <h2 className="text-lg font-bold text-center text-white mb-6">
           Everyday Airdrops
         </h2>
@@ -43,7 +43,7 @@ const PromoLandingContent: React.FC<PromoLandingContentProps> = ({ onAction }) =
       </div>
 
       {/* 2. Xtremely Low Fees */}
-      <div className="bg-[#11131a] rounded-xl p-5 border border-white/[0.02]">
+      <div className="bg-card rounded-xl p-5 border border-border">
         <h2 className="text-lg font-bold text-center text-white mb-4">
           Xtremely Low Fees
         </h2>
@@ -71,7 +71,7 @@ const PromoLandingContent: React.FC<PromoLandingContentProps> = ({ onAction }) =
       </div>
 
       {/* 3. Comprehensive Liquidity */}
-      <div className="bg-[#11131a] rounded-xl p-5 border border-white/[0.02]">
+      <div className="bg-card rounded-xl p-5 border border-border">
         <h2 className="text-lg font-bold text-center text-white mb-4">
           Comprehensive Liquidity
         </h2>
@@ -111,7 +111,7 @@ const PromoLandingContent: React.FC<PromoLandingContentProps> = ({ onAction }) =
       </div>
 
       {/* 4. Three Major Measures */}
-      <div className="bg-[#11131a] rounded-xl p-6 border border-white/[0.02]">
+      <div className="bg-card rounded-xl p-6 border border-border">
         <h2 className="text-lg font-bold text-center text-white mb-2 leading-snug">
           Three Major Measures to Safeguard Asset Security
         </h2>

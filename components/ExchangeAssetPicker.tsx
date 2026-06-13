@@ -119,7 +119,7 @@ const ExchangeAssetPicker: React.FC<ExchangeAssetPickerProps> = ({
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder={t('search_placeholder')}
-            className="w-full px-3 py-2.5 rounded-xl bg-surface border border-border text-textPrimary placeholder:text-textMuted text-sm font-mono focus:outline-none focus:border-neon/50 focus:ring-1 focus:ring-neon/20 transition-colors"
+            className="w-full px-3 py-2.5 rounded-xl bg-surface border border-border text-textPrimary placeholder:text-textMuted text-sm font-mono focus:outline-none focus:border-textMuted transition-colors"
           />
         </div>
 

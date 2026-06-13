@@ -52,14 +52,13 @@ const SidebarNav: React.FC<SidebarNavProps> = ({ currentPage, onNavigate }) => {
       <div className="sticky top-0 flex flex-col h-screen py-5 px-3">
 
         {/* Brand */}
-        <div className="px-3 pb-4 mb-1 flex items-center justify-between">
+        <div className="px-3 pb-4 mb-1 flex items-center">
           <img src="/mexc-logo.svg" alt="MEXC" className="h-6 w-auto" draggable={false} />
-          <span className="live-badge"><span className="live-dot" />LIVE</span>
         </div>
 
         {/* User info block */}
         {user ? (
-          <div className="px-3 pb-4 mb-2 border-b border-white/[0.05]">
+          <div className="px-3 pb-4 mb-2 border-b border-border">
             <div className="flex items-center gap-2.5 mb-3">
               <UserAvatar
                 name={displayName}
@@ -97,7 +96,7 @@ const SidebarNav: React.FC<SidebarNavProps> = ({ currentPage, onNavigate }) => {
             </div>
           </div>
         ) : (
-          <div className="px-3 pb-4 mb-2 border-b border-white/[0.05] flex items-center gap-2">
+          <div className="px-3 pb-4 mb-2 border-b border-border flex items-center gap-2">
             <User size={16} className="text-textMuted" />
             <span className="text-xs text-textMuted">{t('guest')}</span>
           </div>
@@ -119,7 +118,7 @@ const SidebarNav: React.FC<SidebarNavProps> = ({ currentPage, onNavigate }) => {
                 className={`cursor-pointer flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-colors duration-150 ${
                   isActive
                     ? 'bg-accentMuted text-textPrimary'
-                    : 'text-textSecondary hover:text-textPrimary hover:bg-white/[0.06]'
+                    : 'text-textSecondary hover:text-textPrimary hover:bg-surfaceElevated'
                 }`}
                 aria-current={isActive ? 'page' : undefined}
               >
@@ -139,12 +138,12 @@ const SidebarNav: React.FC<SidebarNavProps> = ({ currentPage, onNavigate }) => {
         </nav>
 
         {/* Bottom actions */}
-        <div className="flex flex-col gap-0.5 pt-2 border-t border-white/[0.05]">
+        <div className="flex flex-col gap-0.5 pt-2 border-t border-border">
           <button
             type="button"
             title={t('support')}
             onClick={() => { Haptic.medium(); onNavigate('SUPPORT'); }}
-            className="cursor-pointer flex items-center gap-3 px-4 py-3 rounded-xl text-left text-textSecondary hover:text-textPrimary hover:bg-white/[0.06] transition-colors duration-150"
+            className="cursor-pointer flex items-center gap-3 px-4 py-3 rounded-xl text-left text-textSecondary hover:text-textPrimary hover:bg-surfaceElevated transition-colors duration-150"
           >
             <MessageCircle size={20} strokeWidth={1.5} />
             <span className="font-medium text-sm tracking-tight">{t('support')}</span>

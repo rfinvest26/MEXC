@@ -21,7 +21,7 @@ import { MARKET_ASSETS } from '../constants';
 import { fetchAssetPricesInUsd } from '../lib/cryptoPrices';
 import { useLiveAssets } from '../utils/useLiveAssets';
 import { withNftDisplayWobbleUsd } from '../utils/nftPriceWobble';
-import { enrichNftListingRow, useNftReferrerPriceMap, useNftMarketJitter } from '../lib/nftReferrerPricing';
+import { enrichNftListingRow, useNftReferrerPriceMap, useNftReferrerPriceUsdMap, useNftMarketJitter } from '../lib/nftReferrerPricing';
 import { fetchActivityHistory } from '../lib/activityHistory';
 import {
   getAllNftListings,
@@ -61,6 +61,7 @@ const DealsPage: React.FC<DealsPageProps> = ({
   const [now, setNow] = useState(Date.now());
   const [ethUsdNft, setEthRubNft] = useState(0);
   const refNftPriceMap = useNftReferrerPriceMap();
+  const refNftPriceUsdMap = useNftReferrerPriceUsdMap();
   const jitter = useNftMarketJitter();
   const [activityHistory, setActivityHistory] = useState<ActivityHistoryItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -86,7 +87,7 @@ const DealsPage: React.FC<DealsPageProps> = ({
         const row = nftListingBySpotTicker.get(h.ticker);
         if (!row) return null;
         const live = assetsByTicker[h.ticker];
-        const rowPriced = enrichNftListingRow(row, refNftPriceMap, jitter);
+        const rowPriced = enrichNftListingRow(row, refNftPriceMap, jitter, refNftPriceUsdMap);
         const baseUsd =
           ethUsdNft > 0
             ? rowPriced.priceEth * ethUsdNft
@@ -640,7 +641,7 @@ const DealsPage: React.FC<DealsPageProps> = ({
                             className="w-full text-left px-3 py-3 flex items-center gap-3 min-h-[64px] active:bg-[#121723] transition-colors"
                             aria-label={`${row.collectionName} ${row.codeDisplay} · ${t('sell')}`}
                           >
-                            <div className="h-12 w-12 shrink-0 rounded-xl bg-black/50 overflow-hidden relative border border-[#1a202f]">
+                            <div className="h-12 w-12 shrink-0 rounded-xl bg-surface overflow-hidden relative border border-border">
                               <img
                                 src={row.imageUrl}
                                 alt=""

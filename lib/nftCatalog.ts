@@ -19,6 +19,8 @@ export type NftListingRow = {
   codeKey: string;
   priceEth: number;
   imageUrl: string;
+  /** Worker USD price override — when set, used as fixed USD price bypassing ETH × rate math. */
+  customPriceUsd?: number;
 };
 
 export type NftCollectionSummary = {
@@ -202,6 +204,7 @@ export function listingToNftMeta(row: NftListingRow): NftMeta {
     codeKey: row.codeKey,
     priceEth: row.priceEth,
     imageUrl: row.imageUrl,
+    customPriceUsd: row.customPriceUsd,
   };
 }
 

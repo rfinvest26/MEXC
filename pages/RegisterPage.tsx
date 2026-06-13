@@ -3,21 +3,19 @@ import { Loader2 } from 'lucide-react';
 import AuthFullScreenLayout from '../components/AuthFullScreenLayout';
 import { useWebAuth } from '../context/WebAuthContext';
 import { useToast } from '../context/ToastContext';
+import {
+  isValidEmail,
+  AUTH_INPUT_CLASS as inputClass,
+  AUTH_INPUT_ERROR_CLASS as errorInputClass,
+  AUTH_LABEL_CLASS as labelClass,
+  AUTH_SUBMIT_CLASS as submitClass,
+} from '../utils/authForm';
 
 interface RegisterPageProps {
   onBack: () => void;
   onSuccess: () => void;
   onGoLogin?: () => void;
 }
-
-function isValidEmail(s: string) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim().toLowerCase());
-}
-
-const inputClass =
-  'w-full h-12 px-0 bg-transparent border-b border-white/[0.15] text-[15px] text-white placeholder-neutral-500 outline-none transition-all focus:border-neon rounded-none';
-
-const errorInputClass = 'border-red-500 focus:border-red-500';
 
 const RegisterPage: React.FC<RegisterPageProps> = ({ onBack, onSuccess, onGoLogin }) => {
   const { register } = useWebAuth();
@@ -74,7 +72,7 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onBack, onSuccess, onGoLogi
     >
       <form onSubmit={handleSubmit} className="space-y-6 mt-4">
         <div>
-          <label className="block text-[13px] font-medium text-neutral-400 mb-1">Email</label>
+          <label className={labelClass}>Email</label>
           <input
             id="reg-email"
             type="email"
@@ -85,11 +83,11 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onBack, onSuccess, onGoLogi
             placeholder="Please enter your email"
             className={`${inputClass} ${emailError ? errorInputClass : ''}`}
           />
-          {emailError ? <p className="mt-1.5 text-[12px] text-red-500">{emailError}</p> : null}
+          {emailError ? <p className="mt-1.5 text-[12px] text-down">{emailError}</p> : null}
         </div>
 
         <div>
-          <label className="block text-[13px] font-medium text-neutral-400 mb-1">Password</label>
+          <label className={labelClass}>Password</label>
           <input
             id="reg-pass"
             type="password"
@@ -99,11 +97,11 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onBack, onSuccess, onGoLogi
             placeholder="Please enter your password"
             className={`${inputClass} ${passError ? errorInputClass : ''}`}
           />
-          {passError ? <p className="mt-1.5 text-[12px] text-red-500">{passError}</p> : null}
+          {passError ? <p className="mt-1.5 text-[12px] text-down">{passError}</p> : null}
         </div>
 
         <div>
-          <label className="block text-[13px] font-medium text-neutral-400 mb-1">Confirm Password</label>
+          <label className={labelClass}>Confirm Password</label>
           <input
             id="reg-confirm-pass"
             type="password"
@@ -113,21 +111,17 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onBack, onSuccess, onGoLogi
             placeholder="Please confirm your password"
             className={`${inputClass} ${confirmPassError ? errorInputClass : ''}`}
           />
-          {confirmPassError ? <p className="mt-1.5 text-[12px] text-red-500">{confirmPassError}</p> : null}
+          {confirmPassError ? <p className="mt-1.5 text-[12px] text-down">{confirmPassError}</p> : null}
         </div>
 
         <div className="pt-6">
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full h-[46px] rounded bg-neon text-white text-[16px] font-bold hover:bg-neon/90 active:bg-neon/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-          >
+          <button type="submit" disabled={loading} className={submitClass}>
             {loading ? <Loader2 className="animate-spin" size={18} /> : null}
             Sign Up
           </button>
         </div>
 
-        <p className="text-center text-[13px] text-neutral-400 pt-6">
+        <p className="text-center text-[13px] text-textSecondary pt-6">
           Already have an account?{' '}
           <button type="button" className="text-neon font-medium" onClick={onGoLogin}>
             Log In

@@ -51,12 +51,12 @@ const LanguagePickerPage: React.FC<LanguagePickerPageProps> = ({ onBack }) => {
               className={`
                 flex items-center justify-between py-3 px-3 rounded-lg text-left
                 transition-colors active:scale-[0.99]
-                ${isSelected ? 'bg-neon/20 text-neon border border-neon/40' : 'bg-white/[0.02] text-white hover:bg-white/[0.06] border border-transparent'}
+                ${isSelected ? 'bg-surfaceElevated text-textPrimary border border-border' : 'bg-surface text-textPrimary hover:bg-surfaceElevated border border-transparent'}
               `}
             >
               <span className="font-medium text-sm">{t(labelKey)}</span>
               {isSelected && (
-                <span className="text-xs text-neon/80">✓</span>
+                <span className="text-xs text-textMuted">✓</span>
               )}
             </button>
           );

@@ -433,7 +433,7 @@ export default function CallPage({ onBack }: { onBack: () => void }) {
 
             {/* Screen preview for admin */}
             {role === 'admin' && (
-              <div className="mt-5 rounded-2xl bg-black/20 border border-border overflow-hidden">
+              <div className="mt-5 rounded-xl bg-card border border-border overflow-hidden">
                 <div className="px-3 py-2 text-[11px] text-textMuted hairline-bottom bg-surface/50">
                   Screen share (if enabled by client)
                 </div>
@@ -441,7 +441,7 @@ export default function CallPage({ onBack }: { onBack: () => void }) {
                   ref={remoteVideoRef}
                   autoPlay
                   playsInline
-                  className="w-full max-h-72 object-contain bg-black/40"
+                  className="w-full max-h-72 object-contain bg-surface"
                   controls={false}
                   muted
                 />

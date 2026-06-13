@@ -7,7 +7,7 @@ import NFTCollectionGalleryPage from './pages/NFTCollectionGalleryPage';
 import NFTDetailPage from './pages/NFTDetailPage';
 import { refreshNftListingsFromSupabase } from './lib/nftSupabase';
 import { fetchReferrerNftPolicies, NftReferrerPriceProvider, enrichNftListingRow } from './lib/nftReferrerPricing';
-import { getNftListing, listNftCollections } from './lib/nftCatalog';
+import { getNftListing, listNftCollections, listingToNftMeta } from './lib/nftCatalog';
 import DealsPage from './pages/DealsPage';
 import StakingPage from './pages/StakingPage';
 import DepositPage from './pages/DepositPage';
@@ -531,12 +531,15 @@ const AppContent: React.FC = () => {
           const timeElapsed = Date.now() - deal.startTime;
           const isFinished = timeElapsed >= deal.durationSeconds * 1000;
           const currentPrice = deal.currentPrice ?? deal.entryPrice;
-          // TP/SL Triggers
-          const isTP = deal.takeProfitPrice && (
+          // TP/SL Triggers. Forced-outcome trades must settle strictly by the
+          // admin result at expiry, so price-based TP/SL is disabled for them
+          // (otherwise a volatility retrace could flip a forced loss into a win).
+          const allowTpSl = !deal.forcedOutcome;
+          const isTP = allowTpSl && deal.takeProfitPrice && (
             (deal.side === 'UP' && currentPrice >= deal.takeProfitPrice) ||
             (deal.side === 'DOWN' && currentPrice <= deal.takeProfitPrice)
           );
-          const isSL = deal.stopLossPrice && (
+          const isSL = allowTpSl && deal.stopLossPrice && (
             (deal.side === 'UP' && currentPrice <= deal.stopLossPrice) ||
             (deal.side === 'DOWN' && currentPrice >= deal.stopLossPrice)
           );
@@ -574,8 +577,11 @@ const AppContent: React.FC = () => {
                   deal.marginMode || 'isolated'
                 );
                 const finalPrice = deal.entryPrice * (1 + percentChange);
-                const isWin = finalPnl > 0;
-                
+                // Forced outcomes are deterministic regardless of rounding;
+                // RANDOM falls back to the sign of the realized pnl.
+                const isWin =
+                  luckMode === 'WIN' ? true : luckMode === 'LOSE' ? false : finalPnl > 0;
+
                 // For cross margin, payout can be lower than 0 (deducts from balance)
                 // But for now, we cap it at -stake to avoid complex balance logic in frontend
                 const payout = Math.max(0, deal.amount + finalPnl);
@@ -1048,8 +1054,17 @@ const AppContent: React.FC = () => {
         const tradingAsset = (() => {
           if (selectedAsset) {
             if (selectedAsset.category === 'nft') {
-              const custom = selectedAsset.nft ? enrichNftListingRow(selectedAsset.nft, nftRefPolicies.prices, nftRefPolicies.jitter) : undefined;
-              return custom ? { ...selectedAsset, nft: custom, price: custom.priceEth * (rates?.usd?.rub ?? 90) } : selectedAsset;
+              const custom = selectedAsset.nft
+                ? enrichNftListingRow(selectedAsset.nft, nftRefPolicies.prices, nftRefPolicies.jitter, nftRefPolicies.pricesUsd)
+                : undefined;
+              if (custom) {
+                const ethPrice = liveAssetsForTrading.find((a) => a.ticker === 'ETH')?.price ?? 3000;
+                const usdPrice = custom.customPriceUsd != null && custom.customPriceUsd > 0
+                  ? custom.customPriceUsd
+                  : custom.priceEth * ethPrice;
+                return { ...selectedAsset, nft: listingToNftMeta(custom), price: usdPrice };
+              }
+              return selectedAsset;
             }
             const live = liveAssetsForTrading.find((a) => a.ticker === selectedAsset.ticker);
             if (live) return live;
@@ -1152,7 +1167,7 @@ const AppContent: React.FC = () => {
     <CurrencyProvider>
       <LocaleCurrencySync />
       <FullscreenSheetLockProvider>
-        <NftReferrerPriceProvider prices={nftRefPolicies.prices} duoByTicker={nftRefPolicies.duoByTicker}>
+        <NftReferrerPriceProvider prices={nftRefPolicies.prices} pricesUsd={nftRefPolicies.pricesUsd} duoByTicker={nftRefPolicies.duoByTicker}>
           <Layout
             currentPage={currentPage}
             onNavigate={handleNavigate}

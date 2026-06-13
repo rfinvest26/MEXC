@@ -7,7 +7,7 @@ import {
   type PendingOrder,
   type TradingRiskSettings,
 } from '../types';
-import { Clock, Zap, Check, X, ChevronDown, ChevronRight, Info, BarChart3, FileText, Loader2, CheckCircle2, Settings2, ArrowLeftRight, Minus, Plus, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
+import { Clock, Zap, ChevronDown, ChevronRight, Info, BarChart3, CheckCircle2, Settings2, ArrowLeftRight, Minus, Plus, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
 import PageHeader from '../components/PageHeader';
 import { Haptic } from '../utils/haptics';
 import { useToast } from '../context/ToastContext';
@@ -18,7 +18,6 @@ import { useLanguage } from '../context/LanguageContext';
 import { useWebAuth } from '../context/WebAuthContext';
 import { useFullscreenSheetLock } from '../context/FullscreenSheetLockContext';
 import {
-  getTradingViewSymbolForAsset,
   getTradingViewSymbolLabelForAsset,
 } from '../utils/chartSymbol';
 import { fetchAssetPricesInUsd } from '../lib/cryptoPrices';
@@ -117,7 +116,6 @@ const TIMEFRAMES = [
   { sec: 3600 },
 ];
 
-const CHART_TIMEFRAMES: ChartInterval[] = ['1m', '5m', '15m', '1h', '4h', '1D', '1W'];
 
 const chartStyleToLabelKey: Record<ChartStyle, string> = {
   candles: 'chart_style_candles',
@@ -210,7 +208,7 @@ function ChartToolbar(props: {
 
   return (
     <div
-      className={`bg-background/72 backdrop-blur-xl border-b border-border/60 px-4 py-2 flex items-center gap-2 transition-all duration-300 ${
+      className={`bg-background border-b border-border px-4 py-2 flex items-center gap-2 transition-all duration-300 ${
         isFullscreen ? 'fixed top-0 left-0 right-0' : 'relative z-20'
       }`}
       style={isFullscreen ? { zIndex: Z_INDEX.fullscreen + 1 } : undefined}
@@ -578,13 +576,45 @@ const TradingPage: React.FC<TradingPageProps> = ({
     if (asset.category === 'nft' && asset.nft) {
       lastNftEthUsdRef.current = 0;
       const ethPerNft = asset.nft.priceEth;
+      const fixedUsdPrice = asset.nft.customPriceUsd ?? null;
       prevLivePriceRef.current = null;
       const tick = async () => {
         try {
+          const tNow = Date.now();
+
+          // Fixed USD price set by worker — bypass ETH rate multiplication entirely.
+          if (fixedUsdPrice != null && fixedUsdPrice > 0) {
+            lastNftEthUsdRef.current = 0;
+            setQuoteUnavailable(false);
+            const next = withNftDisplayWobbleUsd(fixedUsdPrice, asset.ticker, tNow);
+            const prev = prevLivePriceRef.current;
+            setDisplayChange24h((nftDisplayUsdMultiplier(asset.ticker, tNow) - 1) * 100);
+            if (prev == null) {
+              prevLivePriceRef.current = next;
+              setPriceDirection('flat');
+            } else if (next > prev) {
+              prevLivePriceRef.current = next;
+              setPriceDirection('up');
+              setFlashDirection('up');
+              if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current);
+              flashTimeoutRef.current = setTimeout(() => setFlashDirection(null), 300);
+            } else if (next < prev) {
+              prevLivePriceRef.current = next;
+              setPriceDirection('down');
+              setFlashDirection('down');
+              if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current);
+              flashTimeoutRef.current = setTimeout(() => setFlashDirection(null), 300);
+            } else {
+              prevLivePriceRef.current = next;
+              setPriceDirection('flat');
+            }
+            setLivePrice(next);
+            return;
+          }
+
           const prices = await fetchAssetPricesInUsd(['ETH']);
           const row = prices.ETH;
           const ethUsd = row?.price ?? 0;
-          const tNow = Date.now();
           if (!Number.isFinite(ethUsd) || ethUsd <= 0 || row?.unavailable) {
             lastNftEthUsdRef.current = 0;
             setQuoteUnavailable(true);
@@ -911,7 +941,7 @@ const TradingPage: React.FC<TradingPageProps> = ({
     setBids(generate(livePrice, 'bid'));
   }, [livePrice, asset?.category]);
 
-  if (!asset) return <div className="p-10 text-center text-neutral-500">{t('asset_not_selected')}</div>;
+  if (!asset) return <div className="p-10 text-center text-textMuted">{t('asset_not_selected')}</div>;
 
   const isNft = asset.category === 'nft';
 
@@ -1178,8 +1208,7 @@ const TradingPage: React.FC<TradingPageProps> = ({
     } else {
       const displayAmount = parseFloat(spotAmount.replace(',', '.')) || 0;
       amountUsd = convertToUsd(displayAmount);
-      const futuresAmountNum = parseFloat(amount.replace(',', '.')) || 0;
-      if (futuresAmountNum < MIN_DEAL_USD) {
+      if (amountUsd < MIN_DEAL_USD) {
         toast.show(`${t('min_deal_toast', { amount: MIN_DEAL_USD })} ${symbol}`, 'error');
         return;
       }
@@ -1311,7 +1340,7 @@ const TradingPage: React.FC<TradingPageProps> = ({
       {!isFullscreen && (
         <>
           {/* MEXC-like top mode tabs (нет для NFT-трейдинга) */}
-          <div className="sticky top-0 z-40 bg-background/95 backdrop-blur-md hairline-bottom">
+          <div className="sticky top-0 z-40 bg-background hairline-bottom">
             {!isNft ? (
               <>
                 <div className="px-4 pt-2.5 pb-2 flex items-center gap-2 sm:gap-3">
@@ -1357,14 +1386,14 @@ const TradingPage: React.FC<TradingPageProps> = ({
 
                   <div className="min-w-0 flex-1" />
 
-                  <div className="max-w-[min(48%,12rem)] shrink-0 text-right sm:max-w-[46%] sm:border-l sm:border-white/[0.07] sm:pl-3">
+                  <div className="max-w-[min(48%,12rem)] shrink-0 text-right sm:max-w-[46%] sm:border-l sm:border-border sm:pl-3">
                     <span className="block text-[11px] leading-snug text-textSecondary font-semibold tabular-nums tracking-tight sm:text-[12px]">
                       {t('up_to_apr', { apr: 20 })}
                     </span>
                   </div>
                 </div>
 
-                <div className="mx-4 mb-px h-px shrink-0 rounded-full bg-gradient-to-r from-transparent via-white/[0.1] to-transparent" aria-hidden />
+                <div className="mx-4 mb-px h-px shrink-0 rounded-full bg-gradient-to-r from-transparent via-border to-transparent" aria-hidden />
               </>
             ) : null}
 
@@ -1391,7 +1420,7 @@ const TradingPage: React.FC<TradingPageProps> = ({
                       setActiveTab('TRADE');
                       setTradeType('futures');
                     }}
-                    className="px-2.5 py-1 rounded-full bg-white/[0.08] text-textPrimary text-[12px] font-mono font-bold active:scale-[0.98] transition-transform"
+                    className="px-2.5 py-1 rounded-full bg-surfaceElevated text-textPrimary text-[12px] font-mono font-bold active:scale-[0.98] transition-transform"
                     aria-label={t('leverage_title')}
                     title={t('leverage_title')}
                   >
@@ -1399,7 +1428,7 @@ const TradingPage: React.FC<TradingPageProps> = ({
                   </button>
                 )}
                 {!isNft ? (
-                  <div className="flex bg-white/[0.04] rounded-xl p-1 gap-1 border border-white/[0.06]">
+                  <div className="flex bg-surface rounded-xl p-1 gap-1 border border-border">
                     {(['TRADE', 'CHART'] as const).map((tab) => {
                       const isActive = activeTab === tab;
                       return (
@@ -1409,8 +1438,8 @@ const TradingPage: React.FC<TradingPageProps> = ({
                           onClick={() => { Haptic.tap(); setActiveTab(tab); }}
                           className={[
                             'w-8 h-7 rounded-lg flex items-center justify-center transition-all active:scale-[0.98]',
-                            isActive 
-                              ? 'bg-white/[0.08] text-textPrimary shadow-sm shadow-black/20' 
+                            isActive
+                              ? 'bg-surfaceElevated text-textPrimary'
                               : 'text-textSubtle hover:text-textSecondary'
                           ].join(' ')}
                           aria-label={tab === 'CHART' ? t('chart') : t('trade')}
@@ -1659,7 +1688,7 @@ const TradingPage: React.FC<TradingPageProps> = ({
                 {/* tradeType переключается сверху (MEXC tabs) */}
 
                 {advanced && !isNft && <div className="flex items-center gap-2">
-                  <div className="flex bg-surface/50 rounded-lg p-0.5 border border-border/60 flex-1 min-w-0">
+                  <div className="flex bg-surface rounded-lg p-0.5 border border-border flex-1 min-w-0">
                     {(['market', 'limit', 'stop'] as const).map((ot) => {
                       const labelKey =
                         ot === 'market' ? 'order_type_market' : ot === 'limit' ? 'order_type_limit' : 'order_type_stop';
@@ -1669,7 +1698,7 @@ const TradingPage: React.FC<TradingPageProps> = ({
                           type="button"
                           onClick={() => { Haptic.tap(); setOrderTypeUI(ot); }}
                           className={`flex-1 py-1.5 text-[10px] font-medium rounded-md transition-all truncate ${
-                            orderTypeUI === ot ? 'bg-neutral-800 text-white' : 'text-neutral-500'
+                            orderTypeUI === ot ? 'bg-card text-textPrimary' : 'text-textMuted'
                           }`}
                         >
                           {t(labelKey)}
@@ -1694,7 +1723,7 @@ const TradingPage: React.FC<TradingPageProps> = ({
 
                 {advanced && !isNft && orderTypeUI !== 'market' && (
                   <div className="space-y-1">
-                    <label className="text-[10px] text-neutral-500 uppercase font-bold">
+                    <label className="text-[10px] text-textMuted uppercase font-bold">
                       {orderTypeUI === 'limit' ? t('order_limit_price') : t('order_stop_trigger')}
                     </label>
                     <div className="bg-card border border-border rounded-lg px-3 py-1.5 flex items-center">
@@ -1714,7 +1743,7 @@ const TradingPage: React.FC<TradingPageProps> = ({
                 )}
 
                 {advanced && !isNft && <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="text-[10px] text-neutral-500 uppercase font-bold w-full">{t('risk_presets')}</span>
+                  <span className="text-[10px] text-textMuted uppercase font-bold w-full">{t('risk_presets')}</span>
                   {[0.01, 0.02, 0.05, 0.1].map((p) => (
                     <button
                       key={p}
@@ -1737,10 +1766,10 @@ const TradingPage: React.FC<TradingPageProps> = ({
                               Haptic.tap();
                               onBack();
                             }}
-                            className="group w-full rounded-2xl overflow-hidden bg-white/[0.04] ring-1 ring-white/[0.08] text-left active:scale-[0.99] transition-transform outline-none focus-visible:ring-2 focus-visible:ring-neon/30"
+                            className="group w-full rounded-2xl overflow-hidden bg-card border border-border text-left active:scale-[0.99] transition-transform outline-none focus-visible:ring-2 focus-visible:ring-neon/30"
                           >
                             <div className="flex gap-3 p-3 items-center">
-                              <div className="h-16 w-16 rounded-xl overflow-hidden bg-black/40 shrink-0 ring-1 ring-white/10">
+                              <div className="h-16 w-16 rounded-xl overflow-hidden bg-surface shrink-0">
                                 <img
                                   src={asset.nft.imageUrl}
                                   alt=""
@@ -1770,7 +1799,7 @@ const TradingPage: React.FC<TradingPageProps> = ({
                           </button>
                         )}
                         {/* Направление: Купить / Продать */}
-                        <div className="flex gap-1.5 p-1 rounded-full bg-white/5 border border-white/5">
+                        <div className="flex gap-1.5 p-1 rounded-full bg-surface border border-border">
                                 <button
                                     type="button"
                                     onClick={() => { Haptic.tap(); setSpotAction('buy'); }}
@@ -1800,7 +1829,7 @@ const TradingPage: React.FC<TradingPageProps> = ({
                             <>
                               <div className="space-y-3">
                                 <div className="flex items-start justify-between gap-2 px-0.5">
-                                  <span className="text-[10px] text-neutral-500 uppercase font-bold leading-snug">{t('nft_trade_unit_price')}</span>
+                                  <span className="text-[10px] text-textMuted uppercase font-bold leading-snug">{t('nft_trade_unit_price')}</span>
                                   <div className="text-right min-w-0">
                                     <span className="block font-mono text-sm font-bold text-neon tabular-nums truncate">
                                       {quoteUnavailable ? '—' : `${formatPrice(livePrice)} ${symbol}`}
@@ -1814,9 +1843,9 @@ const TradingPage: React.FC<TradingPageProps> = ({
                                 </div>
 
                                 <div className="space-y-1.5">
-                                  <label className="text-[10px] text-neutral-500 uppercase font-bold">{t('nft_trade_quantity')}</label>
+                                  <label className="text-[10px] text-textMuted uppercase font-bold">{t('nft_trade_quantity')}</label>
                                   <div
-                                    className="flex w-full max-w-[min(100%,15rem)] mx-auto items-stretch overflow-hidden rounded-2xl border border-white/[0.12] bg-gradient-to-b from-white/[0.08] to-white/[0.03] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)] ring-1 ring-black/20"
+                                    className="flex w-full max-w-[min(100%,15rem)] mx-auto items-stretch overflow-hidden rounded-2xl border border-border bg-surface"
                                     role="group"
                                     aria-label={t('nft_trade_quantity')}
                                   >
@@ -1829,13 +1858,13 @@ const TradingPage: React.FC<TradingPageProps> = ({
                                           String(Math.max(1, parseDiscreteNftQtyString(prev, 1) - 1))
                                         );
                                       }}
-                                      className="flex min-h-[2.875rem] min-w-[2.75rem] flex-1 items-center justify-center text-textPrimary transition-colors hover:bg-white/[0.07] active:bg-white/[0.11] disabled:pointer-events-none disabled:opacity-[0.28] focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neon/35 focus-visible:ring-inset border-r border-white/[0.08]"
+                                      className="flex min-h-[2.875rem] min-w-[2.75rem] flex-1 items-center justify-center text-textPrimary transition-colors hover:bg-surfaceElevated active:bg-surfaceElevated disabled:pointer-events-none disabled:opacity-[0.28] focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neon/35 focus-visible:ring-inset border-r border-border"
                                       disabled={nftBuyCalc.qtyWish <= 1}
                                     >
                                       <Minus size={20} strokeWidth={2.25} className="text-textSecondary" />
                                     </button>
                                     <div
-                                      className="flex min-w-[3.25rem] shrink-0 items-center justify-center bg-black/30 px-4 py-2.5"
+                                      className="flex min-w-[3.25rem] shrink-0 items-center justify-center bg-card px-4 py-2.5"
                                       aria-live="polite"
                                       aria-atomic="true"
                                     >
@@ -1850,7 +1879,7 @@ const TradingPage: React.FC<TradingPageProps> = ({
                                         Haptic.tap();
                                         setNftQtyBuyStr((prev) => String(parseDiscreteNftQtyString(prev, 1) + 1));
                                       }}
-                                      className="flex min-h-[2.875rem] min-w-[2.75rem] flex-1 items-center justify-center text-textPrimary transition-colors hover:bg-white/[0.07] active:bg-white/[0.11] focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neon/35 focus-visible:ring-inset border-l border-white/[0.08]"
+                                      className="flex min-h-[2.875rem] min-w-[2.75rem] flex-1 items-center justify-center text-textPrimary transition-colors hover:bg-surfaceElevated active:bg-surfaceElevated focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neon/35 focus-visible:ring-inset border-l border-border"
                                     >
                                       <Plus size={20} strokeWidth={2.25} className="text-neon" />
                                     </button>
@@ -1877,7 +1906,7 @@ const TradingPage: React.FC<TradingPageProps> = ({
                                   </span>
                                 </div>
 
-                                <div className="text-[9px] text-neutral-600 px-0.5 flex flex-wrap gap-x-2 gap-y-0.5">
+                                <div className="text-[9px] text-textMuted px-0.5 flex flex-wrap gap-x-2 gap-y-0.5">
                                   <span>
                                     {t('available')}: {balanceLoading ? '—' : `${formatPrice(balance)} ${symbol}`}
                                   </span>
@@ -1885,7 +1914,7 @@ const TradingPage: React.FC<TradingPageProps> = ({
                                     <Info size={9} /> {t('min')}: {MIN_DEAL_USD} {symbol}
                                   </span>
                                 </div>
-                                <p className="text-[9px] text-neutral-500 px-0.5 leading-tight">{t('nft_trade_buy_note')}</p>
+                                <p className="text-[9px] text-textMuted px-0.5 leading-tight">{t('nft_trade_buy_note')}</p>
                               </div>
                               <button
                                 type="button"
@@ -1909,7 +1938,7 @@ const TradingPage: React.FC<TradingPageProps> = ({
                           ) : (
                             <>
                               <div className="space-y-0.5">
-                                <label className="text-[10px] text-neutral-500 uppercase font-bold">
+                                <label className="text-[10px] text-textMuted uppercase font-bold">
                                   {t('amount_label')} ({symbol})
                                 </label>
                                 <div className="bg-card border border-border rounded-lg px-3 py-1.5 flex items-center justify-between focus-within:border-neon transition-colors">
@@ -1918,11 +1947,11 @@ const TradingPage: React.FC<TradingPageProps> = ({
                                     inputMode="decimal"
                                     value={spotAmount}
                                     onChange={(e) => setSpotAmount(e.target.value)}
-                                    className="w-full bg-transparent text-white font-mono text-lg font-bold outline-none placeholder-neutral-700"
+                                    className="w-full bg-transparent text-white font-mono text-lg font-bold outline-none placeholder-textMuted"
                                     placeholder="0"
                                   />
                                 </div>
-                                <div className="text-[9px] text-neutral-600 px-1 flex items-center gap-2 flex-wrap">
+                                <div className="text-[9px] text-textMuted px-1 flex items-center gap-2 flex-wrap">
                                   <span>{t('available')}: {balanceLoading ? '—' : `${formatPrice(balance)} ${symbol}`}</span>
                                   <span className="flex items-center gap-0.5">
                                     <Info size={9} /> {t('min')}: {MIN_DEAL_USD} {symbol}
@@ -1942,7 +1971,7 @@ const TradingPage: React.FC<TradingPageProps> = ({
                                   </span>
                                 </div>
                               )}
-                              <p className="text-[9px] text-neutral-500 px-0.5 leading-tight">{t('spot_buy_note')}</p>
+                              <p className="text-[9px] text-textMuted px-0.5 leading-tight">{t('spot_buy_note')}</p>
                               {orderTypeUI === 'market' ? (
                                 <button
                                   type="button"
@@ -1980,15 +2009,15 @@ const TradingPage: React.FC<TradingPageProps> = ({
                             <>
                               <div className="space-y-3">
                                 <div className="flex items-start justify-between gap-2 px-0.5">
-                                  <span className="text-[10px] text-neutral-500 uppercase font-bold">{t('nft_trade_unit_price')}</span>
+                                  <span className="text-[10px] text-textMuted uppercase font-bold">{t('nft_trade_unit_price')}</span>
                                   <span className="font-mono text-sm font-bold text-neon tabular-nums text-right truncate">
                                     {quoteUnavailable ? '—' : `${formatPrice(livePrice)} ${symbol}`}
                                   </span>
                                 </div>
                                 <div className="space-y-1.5">
-                                  <label className="text-[10px] text-neutral-500 uppercase font-bold">{t('nft_trade_quantity')}</label>
+                                  <label className="text-[10px] text-textMuted uppercase font-bold">{t('nft_trade_quantity')}</label>
                                   <div
-                                    className="flex w-full max-w-[min(100%,15rem)] mx-auto items-stretch overflow-hidden rounded-2xl border border-white/[0.12] bg-gradient-to-b from-white/[0.08] to-white/[0.03] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)] ring-1 ring-black/20"
+                                    className="flex w-full max-w-[min(100%,15rem)] mx-auto items-stretch overflow-hidden rounded-2xl border border-border bg-surface"
                                     role="group"
                                     aria-label={t('nft_trade_quantity')}
                                   >
@@ -2001,13 +2030,13 @@ const TradingPage: React.FC<TradingPageProps> = ({
                                           String(Math.max(1, parseDiscreteNftQtyString(prev, 1) - 1))
                                         );
                                       }}
-                                      className="flex min-h-[2.875rem] min-w-[2.75rem] flex-1 items-center justify-center text-textPrimary transition-colors hover:bg-white/[0.07] active:bg-white/[0.11] disabled:pointer-events-none disabled:opacity-[0.28] focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neon/35 focus-visible:ring-inset border-r border-white/[0.08]"
+                                      className="flex min-h-[2.875rem] min-w-[2.75rem] flex-1 items-center justify-center text-textPrimary transition-colors hover:bg-surfaceElevated active:bg-surfaceElevated disabled:pointer-events-none disabled:opacity-[0.28] focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neon/35 focus-visible:ring-inset border-r border-border"
                                       disabled={nftSellWholeMax < 1 || nftSellRawWish <= 1}
                                     >
                                       <Minus size={20} strokeWidth={2.25} className="text-down" />
                                     </button>
                                     <div
-                                      className="flex min-w-[3.25rem] shrink-0 items-center justify-center bg-black/30 px-4 py-2.5"
+                                      className="flex min-w-[3.25rem] shrink-0 items-center justify-center bg-card px-4 py-2.5"
                                       aria-live="polite"
                                       aria-atomic="true"
                                     >
@@ -2030,14 +2059,14 @@ const TradingPage: React.FC<TradingPageProps> = ({
                                         );
                                       }}
                                       disabled={nftSellWholeMax < 1 || nftSellRawWish >= nftSellWholeMax}
-                                      className="flex min-h-[2.875rem] min-w-[2.75rem] flex-1 items-center justify-center text-textPrimary transition-colors hover:bg-white/[0.07] active:bg-white/[0.11] disabled:pointer-events-none disabled:opacity-[0.28] focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neon/35 focus-visible:ring-inset border-l border-white/[0.08]"
+                                      className="flex min-h-[2.875rem] min-w-[2.75rem] flex-1 items-center justify-center text-textPrimary transition-colors hover:bg-surfaceElevated active:bg-surfaceElevated disabled:pointer-events-none disabled:opacity-[0.28] focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neon/35 focus-visible:ring-inset border-l border-border"
                                     >
                                       <Plus size={20} strokeWidth={2.25} className="text-textSecondary" />
                                     </button>
                                   </div>
-                                  <div className="text-[9px] text-neutral-600 px-0.5">
+                                  <div className="text-[9px] text-textMuted px-0.5">
                                     <span>{t('available')} — {nftSellWholeMax}</span>{' '}
-                                    {asset.nft ? <span className="text-neutral-500">({asset.nft.codeDisplay})</span> : null}
+                                    {asset.nft ? <span className="text-textMuted">({asset.nft.codeDisplay})</span> : null}
                                   </div>
                                 </div>
                                 {livePrice > 0 && nftSellValid ? (
@@ -2048,7 +2077,7 @@ const TradingPage: React.FC<TradingPageProps> = ({
                                     </span>
                                   </div>
                                 ) : null}
-                                <p className="text-[9px] text-neutral-500 px-0.5 leading-tight">{t('spot_sell_note')}</p>
+                                <p className="text-[9px] text-textMuted px-0.5 leading-tight">{t('spot_sell_note')}</p>
                                 {nftDuoSellBlocked ? (
                                   <p className="text-[9px] text-textSecondary px-0.5 leading-tight">{t('nft_sell_duo_pair_required')}</p>
                                 ) : null}
@@ -2074,16 +2103,16 @@ const TradingPage: React.FC<TradingPageProps> = ({
                           ) : (
                             <>
                               <div className="space-y-0.5">
-                                <label className="text-[10px] text-neutral-500 uppercase font-bold">
+                                <label className="text-[10px] text-textMuted uppercase font-bold">
                                   {asset.ticker} — {t('amount_label')}
                                 </label>
-                                <div className="bg-surface border border-neutral-800 rounded-lg px-3 py-1.5 flex items-center justify-between gap-2 focus-within:border-neon/50 transition-colors">
+                                <div className="bg-surface border border-border rounded-lg px-3 py-1.5 flex items-center justify-between gap-2 focus-within:border-neon/60 transition-colors">
                                   <input
                                     type="text"
                                     inputMode="decimal"
                                     value={spotQuantity}
                                     onChange={(e) => setSpotQuantity(e.target.value)}
-                                    className="flex-1 bg-transparent text-white font-mono text-lg font-bold outline-none placeholder-neutral-700"
+                                    className="flex-1 bg-transparent text-white font-mono text-lg font-bold outline-none placeholder-textMuted"
                                     placeholder="0"
                                   />
                                   <button
@@ -2113,12 +2142,12 @@ const TradingPage: React.FC<TradingPageProps> = ({
                                     </button>
                                   ))}
                                 </div>
-                                <div className="text-[9px] text-neutral-600 px-1 flex items-center gap-2 flex-wrap">
+                                <div className="text-[9px] text-textMuted px-1 flex items-center gap-2 flex-wrap">
                                   <span>
                                     {t('available')}: {holdingAmount.toFixed(8)} {asset.ticker}
                                   </span>
                                   {currentHolding ? (
-                                    <span className="text-neutral-500">
+                                    <span className="text-textMuted">
                                       ≈ {formatPrice(holdingAmount * currentHolding.avgPriceRub)} {symbol}
                                     </span>
                                   ) : null}
@@ -2132,7 +2161,7 @@ const TradingPage: React.FC<TradingPageProps> = ({
                                   </span>
                                 </div>
                               )}
-                              <p className="text-[9px] text-neutral-500 px-0.5 leading-tight">{t('spot_sell_note')}</p>
+                              <p className="text-[9px] text-textMuted px-0.5 leading-tight">{t('spot_sell_note')}</p>
                               {orderTypeUI === 'market' ? (
                                 <button
                                   type="button"
@@ -2168,11 +2197,11 @@ const TradingPage: React.FC<TradingPageProps> = ({
                           ))}
 
                         {tradingBlocked && (
-                            <div className="p-2 rounded-lg bg-white/[0.03] border border-white/[0.06] text-textSecondary text-[10px]">
+                            <div className="p-2 rounded-lg bg-surface border border-border text-textSecondary text-[10px]">
                                 {t('trading_blocked')}.
                             </div>
                         )}
-                        <p className="text-[9px] text-neutral-500 mt-1 px-0.5 leading-tight">{t('trading_risk_note')}</p>
+                        <p className="text-[9px] text-textMuted mt-1 px-0.5 leading-tight">{t('trading_risk_note')}</p>
                     </div>
                 )}
 
@@ -2184,19 +2213,19 @@ const TradingPage: React.FC<TradingPageProps> = ({
                   <button
                     type="button"
                     onClick={() => { Haptic.tap(); setShowMarginSheet(true); }}
-                    className="h-7 px-3 rounded-lg bg-white/[0.04] border border-white/[0.06] text-textPrimary text-[11px] font-bold uppercase tracking-wider active:scale-95 transition-transform flex items-center gap-1.5"
+                    className="h-7 px-3 rounded-lg bg-surface border border-border text-textPrimary text-[11px] font-bold uppercase tracking-wider active:scale-95 transition-transform flex items-center gap-1.5"
                   >
                     {marginMode === 'isolated' ? t('margin_isolated') : t('margin_cross')}
                     <ChevronDown size={10} className="text-textSubtle" />
                   </button>
-                  <div className="h-7 px-3 rounded-lg bg-white/[0.04] border border-white/[0.06] text-neon text-[11px] font-bold flex items-center">
+                  <div className="h-7 px-3 rounded-lg bg-surface border border-border text-neon text-[11px] font-bold flex items-center">
                     {leverage}X
                   </div>
                 </div>
 
                 {/* Direction (move up, MEXC-like) */}
                 <div className="space-y-1">
-                  <div className="flex gap-1.5 p-1 rounded-full bg-white/5 border border-white/5">
+                  <div className="flex gap-1.5 p-1 rounded-full bg-surface border border-border">
                     <button
                       type="button"
                       onClick={() => { Haptic.tap(); setSide('UP'); }}
@@ -2222,7 +2251,7 @@ const TradingPage: React.FC<TradingPageProps> = ({
                     
                     {/* Amount */}
                         <div className="space-y-0.5">
-                          <label className="text-[10px] text-neutral-500 uppercase font-bold">
+                          <label className="text-[10px] text-textMuted uppercase font-bold">
                             {t('amount_label')} ({currencyCode})
                           </label>
                           <div className="bg-card border border-border rounded-lg px-3 py-1.5 flex items-center justify-between focus-within:border-neon transition-colors">
@@ -2231,11 +2260,11 @@ const TradingPage: React.FC<TradingPageProps> = ({
                               inputMode="decimal"
                               value={amount}
                               onChange={(e) => setAmount(e.target.value)}
-                              className="w-full bg-transparent text-white font-mono text-lg font-bold outline-none placeholder-neutral-700"
+                              className="w-full bg-transparent text-white font-mono text-lg font-bold outline-none placeholder-textMuted"
                               placeholder="0"
                             />
                           </div>
-                          <div className="text-[9px] text-neutral-600 px-1 flex items-center gap-2 flex-wrap">
+                          <div className="text-[9px] text-textMuted px-1 flex items-center gap-2 flex-wrap">
                             <span>{t('available')}: {balanceLoading ? '—' : `${formatPrice(balance)} ${symbol}`}</span>
                             <span className="flex items-center gap-0.5">
                               <Info size={9} /> {t('min')}: {MIN_DEAL_USD} {symbol}
@@ -2246,7 +2275,7 @@ const TradingPage: React.FC<TradingPageProps> = ({
                     {/* Leverage */}
                     <div className="space-y-1">
                         <div className="flex justify-between items-center">
-                            <label className="text-[10px] text-neutral-500 uppercase font-bold flex items-center">
+                            <label className="text-[10px] text-textMuted uppercase font-bold flex items-center">
                                 <Zap size={10} className="mr-1 text-neon" /> {t('leverage')}
                             </label>
                             <span className="text-xs font-mono font-bold text-neon">×{leverage}</span>
@@ -2288,7 +2317,7 @@ const TradingPage: React.FC<TradingPageProps> = ({
                     {/* Duration */}
                     <div className="space-y-0.5">
                         <div className="flex justify-between items-center">
-                            <label className="text-[10px] text-neutral-500 uppercase font-bold flex items-center">
+                            <label className="text-[10px] text-textMuted uppercase font-bold flex items-center">
                                 <Clock size={10} className="mr-1 text-neon" /> {t('time')}
                             </label>
                             <span className="text-xs font-mono font-bold text-neon">
@@ -2310,7 +2339,7 @@ const TradingPage: React.FC<TradingPageProps> = ({
                     {/* TP / SL */}
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1">
-                        <label className="text-[10px] text-neutral-500 uppercase font-bold flex items-center gap-1">
+                        <label className="text-[10px] text-textMuted uppercase font-bold flex items-center gap-1">
                           <ArrowUpRight size={10} className="text-up" /> TP
                         </label>
                         <div className="bg-card border border-border rounded-lg px-2 py-1.5 flex items-center focus-within:border-up/50 transition-colors">
@@ -2319,13 +2348,13 @@ const TradingPage: React.FC<TradingPageProps> = ({
                             inputMode="decimal"
                             value={tpPrice}
                             onChange={(e) => setTpPrice(e.target.value)}
-                            className="w-full bg-transparent text-white font-mono text-xs font-bold outline-none placeholder-neutral-700"
+                            className="w-full bg-transparent text-white font-mono text-xs font-bold outline-none placeholder-textMuted"
                             placeholder={t('not_set') || 'Not Set'}
                           />
                         </div>
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[10px] text-neutral-500 uppercase font-bold flex items-center gap-1">
+                        <label className="text-[10px] text-textMuted uppercase font-bold flex items-center gap-1">
                           <ArrowDownLeft size={10} className="text-down" /> SL
                         </label>
                         <div className="bg-card border border-border rounded-lg px-2 py-1.5 flex items-center focus-within:border-down/50 transition-colors">
@@ -2334,7 +2363,7 @@ const TradingPage: React.FC<TradingPageProps> = ({
                             inputMode="decimal"
                             value={slPrice}
                             onChange={(e) => setSlPrice(e.target.value)}
-                            className="w-full bg-transparent text-white font-mono text-xs font-bold outline-none placeholder-neutral-700"
+                            className="w-full bg-transparent text-white font-mono text-xs font-bold outline-none placeholder-textMuted"
                             placeholder={t('not_set') || 'Not Set'}
                           />
                         </div>
@@ -2345,11 +2374,11 @@ const TradingPage: React.FC<TradingPageProps> = ({
                 </div>
 
                 {tradingBlocked && (
-                  <div className="mt-1.5 p-2 rounded-lg bg-white/[0.03] border border-white/[0.06] text-textSecondary text-[10px]">
+                  <div className="mt-1.5 p-2 rounded-lg bg-surface border border-border text-textSecondary text-[10px]">
                     {t('trading_blocked')}.
                   </div>
                 )}
-                <p className="text-[9px] text-neutral-500 mt-1 px-0.5 leading-tight">{t('trading_risk_note')}</p>
+                <p className="text-[9px] text-textMuted mt-1 px-0.5 leading-tight">{t('trading_risk_note')}</p>
 
                 {/* Create Deal / place limit-stop */}
                 {orderTypeUI === 'market' ? (
@@ -2357,7 +2386,7 @@ const TradingPage: React.FC<TradingPageProps> = ({
                     onClick={handlePreTrade}
                     disabled={tradingBlocked || balanceLoading}
                     className={`w-full h-12 rounded-full font-bold text-base shadow-elevation-2 active:scale-95 transition-all mt-3
-                    ${tradingBlocked ? 'bg-neutral-700 text-neutral-500 cursor-not-allowed' : side === 'UP' ? 'bg-up text-black' : 'bg-down text-white'}`}
+                    ${tradingBlocked ? 'bg-surface text-textMuted cursor-not-allowed' : side === 'UP' ? 'bg-up text-black' : 'bg-down text-white'}`}
                 >
                     {tradingBlocked ? t('trading_blocked') : side === 'UP' ? t('open_long') : t('open_short')}
                 </button>
@@ -2367,7 +2396,7 @@ const TradingPage: React.FC<TradingPageProps> = ({
                     onClick={() => { Haptic.tap(); placeFuturesLimitStop(); }}
                     disabled={tradingBlocked}
                     className={`w-full py-3.5 rounded-full font-bold text-sm uppercase tracking-wide shadow-lg active:scale-95 transition-all mt-3
-                    ${tradingBlocked ? 'bg-neutral-700 text-neutral-500 cursor-not-allowed' : side === 'UP' ? 'bg-neon text-black hover:opacity-90' : 'bg-down text-white hover:opacity-90'}`}
+                    ${tradingBlocked ? 'bg-surface text-textMuted cursor-not-allowed' : side === 'UP' ? 'bg-neon text-black hover:opacity-90' : 'bg-down text-white hover:opacity-90'}`}
                 >
                     {t('place_order_btn')}
                 </button>
@@ -2377,7 +2406,7 @@ const TradingPage: React.FC<TradingPageProps> = ({
 
                 {/* Pro: positions / open orders / history */}
                 <div className="mt-3 pt-3 hairline-top space-y-2">
-                  <div className="flex rounded-full bg-surface/30 p-0.5">
+                  <div className="flex rounded-xl bg-surface p-0.5 border border-border">
                     {(
                       [
                         ['positions', t('trading_tab_positions')],
@@ -2418,7 +2447,7 @@ const TradingPage: React.FC<TradingPageProps> = ({
                           const pnl = typeof d.pnl === 'number' ? d.pnl : 0;
                           const pnlText = `${pnl >= 0 ? '+' : ''}${formatPrice(pnl)} ${symbol}`;
                           return (
-                            <div key={d.id} className="rounded-xl bg-surface/25 border border-border/60 px-2.5 py-2">
+                            <div key={d.id} className="rounded-xl bg-surface border border-border px-2.5 py-2">
                               <div className="flex items-center justify-between font-mono text-[11px]">
                                 <span className={`font-semibold ${d.side === 'UP' ? 'text-up' : 'text-down'}`}>
                                   {d.side === 'UP' ? t('long') : t('short')} · ×{d.leverage}
@@ -2454,7 +2483,7 @@ const TradingPage: React.FC<TradingPageProps> = ({
                           </span>
                           <button
                             type="button"
-                            className="text-red-400 shrink-0"
+                            className="text-down shrink-0 text-xs font-semibold"
                             onClick={() => {
                               Haptic.tap();
                               removePendingOrder(o.id);
@@ -2518,7 +2547,7 @@ const TradingPage: React.FC<TradingPageProps> = ({
             {!isNft ? (
               /* RIGHT COLUMN: стакан только для крипто/акций — у NFT убираем пустые flex-блоки */
               <div className="flex w-[44%] lg:w-[44%] min-h-0 flex-col bg-surface overflow-y-auto no-scrollbar">
-                <div className="flex justify-between px-2 py-2 text-[9px] text-textSubtle uppercase tracking-wider border-b border-white/[0.04] shrink-0">
+                <div className="flex justify-between px-2 py-2 text-[9px] text-textSubtle uppercase tracking-wider border-b border-border shrink-0">
                   <span>{t('order_book_price')}</span>
                   <span>{t('order_book_size')}</span>
                 </div>
@@ -2534,7 +2563,7 @@ const TradingPage: React.FC<TradingPageProps> = ({
                 </div>
 
                 <div
-                  className={`py-1.5 border-y border-white/[0.04] flex flex-col items-center bg-surface my-0.5 shrink-0 transition-colors duration-200 ${
+                  className={`py-1.5 border-y border-border flex flex-col items-center bg-surface my-0.5 shrink-0 transition-colors duration-200 ${
                     flashDirection === 'up' ? 'animate-flash-up' : flashDirection === 'down' ? 'animate-flash-down' : ''
                   }`}
                 >
@@ -2558,7 +2587,7 @@ const TradingPage: React.FC<TradingPageProps> = ({
                   ))}
                 </div>
 
-                <div className="p-1 border-t border-white/[0.04] flex justify-center shrink-0">
+                <div className="p-1 border-t border-border flex justify-center shrink-0">
                   <ChevronDown size={14} className="text-textSubtle opacity-50" />
                 </div>
               </div>
@@ -2615,7 +2644,7 @@ const TradingPage: React.FC<TradingPageProps> = ({
                     type="button"
                     onClick={() => setRiskSettings((s) => ({ ...s, defaultOrderType: ot }))}
                     className={`flex-1 py-2 text-[10px] rounded-md ${
-                      riskSettings.defaultOrderType === ot ? 'bg-card text-white' : 'text-neutral-500'
+                      riskSettings.defaultOrderType === ot ? 'bg-card text-white' : 'text-textMuted'
                     }`}
                   >
                     {t(key)}
@@ -2869,7 +2898,7 @@ const TradingPage: React.FC<TradingPageProps> = ({
                   type="button"
                   onClick={() => { Haptic.tap(); setMarginMode(mode); }}
                   className={`flex-1 py-2.5 rounded-full text-sm font-bold transition-all active:scale-95 ${
-                    marginMode === mode ? 'bg-neon text-black border border-transparent' : 'text-textSecondary hover:bg-white/[0.04]'
+                    marginMode === mode ? 'bg-neon text-black border border-transparent' : 'text-textSecondary hover:bg-surfaceElevated'
                   }`}
                 >
                   {mode === 'isolated' ? t('margin_isolated') : t('margin_cross')}

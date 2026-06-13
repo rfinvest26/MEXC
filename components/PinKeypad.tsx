@@ -64,7 +64,7 @@ const PinKeypad: React.FC<PinKeypadProps> = ({ value, onChange, onSubmit, error,
                 type="button"
                 onClick={backspace}
                 disabled={disabled}
-                className="touch-target min-h-[56px] sm:min-h-[72px] rounded-2xl bg-card border border-border flex items-center justify-center active:scale-[0.96] disabled:opacity-50 transition-transform duration-150 hover:bg-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-neon/50"
+                className="touch-target min-h-[56px] sm:min-h-[72px] rounded-2xl bg-card border border-border flex items-center justify-center active:scale-[0.96] disabled:opacity-50 transition-transform duration-150 hover:bg-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-border"
               >
                 <Delete size={26} className="text-textMuted" />
               </button>
@@ -76,7 +76,7 @@ const PinKeypad: React.FC<PinKeypadProps> = ({ value, onChange, onSubmit, error,
               type="button"
               onClick={() => addDigit(d)}
               disabled={disabled}
-              className="touch-target min-h-[56px] sm:min-h-[72px] rounded-2xl bg-card border border-border text-white text-2xl font-mono font-bold active:scale-[0.96] disabled:opacity-50 transition-transform duration-150 hover:bg-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-neon/50"
+              className="touch-target min-h-[56px] sm:min-h-[72px] rounded-2xl bg-card border border-border text-white text-2xl font-mono font-bold active:scale-[0.96] disabled:opacity-50 transition-transform duration-150 hover:bg-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-border"
             >
               {d}
             </button>

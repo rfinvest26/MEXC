@@ -52,29 +52,29 @@ const PortfolioSummary: React.FC<PortfolioSummaryProps> = ({
   if (totalRub <= 0 && spotHoldings.length === 0) return null;
 
   return (
-    <div className="rounded-lg border border-border bg-surface p-3 mb-3">
-      <p className="text-[10px] text-neutral-500 uppercase tracking-wider mb-2">
+    <div className="rounded-xl border border-border bg-card p-3 mb-3">
+      <p className="text-[10px] text-textMuted uppercase tracking-wider mb-2 font-semibold">
         {t('portfolio_summary')}
       </p>
       <div className="flex items-center gap-3 flex-wrap">
         <div className="flex-1 min-w-[120px]">
-          <div className="h-1.5 rounded-full bg-white/10 overflow-hidden flex">
+          <div className="h-1.5 rounded-full bg-surface overflow-hidden flex">
             <div
-              className="h-full bg-neon/60 rounded-l-full transition-all"
+              className="h-full bg-neon/70 rounded-l-full transition-all"
               style={{ width: `${currencyPct}%` }}
             />
             <div
-              className="h-full bg-white/30 rounded-r-full transition-all"
+              className="h-full bg-white/20 rounded-r-full transition-all"
               style={{ width: `${cryptoPct}%` }}
             />
           </div>
-          <p className="text-[10px] font-mono text-neutral-500 mt-1">
+          <p className="text-[10px] font-mono text-textMuted mt-1">
             {t('portfolio_currency')} {currencyPct.toFixed(0)}% · {t('portfolio_crypto')} {cryptoPct.toFixed(0)}%
           </p>
         </div>
         {top3.length > 0 && (
           <div className="flex items-center gap-1.5 flex-shrink-0 flex-wrap">
-            <span className="text-[10px] text-neutral-500">{t('portfolio_top')}:</span>
+            <span className="text-[10px] text-textMuted">{t('portfolio_top')}:</span>
             {top3.map(({ ticker, valueRub }) => {
               const pct = totalRub > 0 ? (valueRub / totalRub) * 100 : 0;
               return (
@@ -82,7 +82,7 @@ const PortfolioSummary: React.FC<PortfolioSummaryProps> = ({
                   key={ticker}
                   type="button"
                   onClick={() => onAssetClick?.(ticker)}
-                  className="font-mono text-xs font-medium text-neutral-400 hover:text-neon transition-colors"
+                  className="font-mono text-xs font-medium text-textSecondary hover:text-neon transition-colors"
                 >
                   {ticker} {pct.toFixed(0)}%
                 </button>

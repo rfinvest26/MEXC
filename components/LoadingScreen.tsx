@@ -1,12 +1,5 @@
 import React, { useEffect } from 'react';
 
-/**
- * Экран загрузки — логотип eToro.
- * Текст «eToro» с акцентом на «e», подзаголовок «Trade & Invest».
- *
- * FIX: таймаут-fallback 2000ms гарантирует продолжение работы даже если
- * onAnimationEnd не сработает (Android WebView, SVG-анимации).
- */
 interface LoadingScreenProps {
   onAnimationComplete?: () => void;
 }
@@ -18,70 +11,20 @@ const LoadingScreen: React.FC<LoadingScreenProps> = ({ onAnimationComplete }) =>
   }, [onAnimationComplete]);
 
   return (
-  <div className="h-[100dvh] w-full bg-background flex items-center justify-center overflow-hidden">
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 800 600"
-      className="w-full h-full max-h-[100vh] object-contain"
-      preserveAspectRatio="xMidYMid meet"
-      aria-hidden
-    >
-      <style>
-        {`
-          .etoro-brand {
-            opacity: 0;
-            transform: translateY(16px);
-            animation: etoroReveal 0.7s cubic-bezier(0.22, 1, 0.36, 1) 0.15s forwards;
-          }
-          .etoro-e {
-            fill: #21B053;
-          }
-          .etoro-toro {
-            fill: #FFFFFF;
-          }
-          .etoro-tagline {
-            opacity: 0;
-            letter-spacing: 0.2em;
-            animation: etoroTagline 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.5s forwards;
-          }
-          @keyframes etoroReveal {
-            0% { opacity: 0; transform: translateY(16px); }
-            100% { opacity: 1; transform: translateY(0); }
-          }
-          @keyframes etoroTagline {
-            0% { opacity: 0; transform: translateY(6px); }
-            100% { opacity: 1; transform: translateY(0); }
-          }
-        `}
-      </style>
-
-      <g
-        textAnchor="middle"
-        style={{ fontFamily: "system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, sans-serif" }}
-      >
-        <text
-          className="etoro-brand"
-          x="400"
-          y="320"
-          fontSize="72"
-          fontWeight="700"
-        >
-          <tspan className="etoro-e">e</tspan>
-          <tspan className="etoro-toro">Toro</tspan>
-        </text>
-        <text
-          className="etoro-tagline"
-          x="400"
-          y="380"
-          fontSize="13"
-          fill="#6B7280"
-          fontWeight="500"
-        >
-          TRADE & INVEST
-        </text>
-      </g>
-    </svg>
-  </div>
+    <div className="h-[100dvh] w-full bg-background flex flex-col items-center justify-center gap-6 overflow-hidden">
+      <img
+        src="/mexc-logo.png"
+        alt="MEXC"
+        className="w-32 h-auto animate-premium-logo"
+      />
+      <div className="flex flex-col items-center gap-3 animate-premium-fade-in">
+        <svg className="animate-premium-spin w-5 h-5" viewBox="0 0 24 24" fill="none" aria-hidden>
+          <circle cx="12" cy="12" r="10" stroke="rgba(255,255,255,0.06)" strokeWidth="2" />
+          <path fill="#2b82f6" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+        </svg>
+        <span className="text-[10px] font-mono uppercase tracking-[0.22em] text-textMuted">MEXC</span>
+      </div>
+    </div>
   );
 };
 

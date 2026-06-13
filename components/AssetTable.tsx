@@ -87,7 +87,7 @@ const AssetTable: React.FC<AssetTableProps> = ({
               variant === 'minimal'
                 ? [
                     'rounded-none',
-                    'bg-transparent hover:bg-white/[0.03]',
+                    'bg-transparent hover:bg-surfaceElevated',
                     'focus:outline-none',
                     idx === sortedAssets.length - 1 ? '' : 'hairline-bottom',
                   ].join(' ')
@@ -96,7 +96,7 @@ const AssetTable: React.FC<AssetTableProps> = ({
           >
             <div className="col-span-5 flex items-center gap-2 min-w-0">
               {asset.logoUrl ? (
-                <div className="h-8 w-8 shrink-0 rounded-full overflow-hidden bg-black/40 ring-1 ring-white/[0.1]">
+                <div className="h-8 w-8 shrink-0 rounded-full overflow-hidden bg-surface">
                   <img src={asset.logoUrl} alt="" className="h-full w-full object-cover" loading="lazy" referrerPolicy="no-referrer" />
                 </div>
               ) : null}

@@ -148,15 +148,15 @@ const StakingPage: React.FC<StakingPageProps> = ({
               <TrendingUp size={12} className="text-neon" />
               {t('special_offer')} · {t('staking_title')}
             </span>
-            <span className="text-[10px] text-neutral-500">{availableTickers.length}</span>
+            <span className="text-[10px] text-textMuted">{availableTickers.length}</span>
           </div>
           <div className="grid grid-cols-2 gap-2 px-3 py-2 hairline-bottom">
-            <div className="rounded-2xl bg-black/20 px-2.5 py-2">
-              <p className="text-[10px] text-neutral-500 uppercase tracking-wide">{t('my_staking')}</p>
+            <div className="rounded-xl bg-surface px-2.5 py-2">
+              <p className="text-[10px] text-textMuted uppercase tracking-wide">{t('my_staking')}</p>
               <p className="text-sm font-mono font-semibold text-white mt-0.5">{totalStaked.toFixed(4)}</p>
             </div>
-            <div className="rounded-2xl bg-black/20 px-2.5 py-2 text-right">
-              <p className="text-[10px] text-neutral-500 uppercase tracking-wide">{t('total_balance')}</p>
+            <div className="rounded-xl bg-surface px-2.5 py-2 text-right">
+              <p className="text-[10px] text-textMuted uppercase tracking-wide">{t('total_balance')}</p>
               <p className="text-sm font-mono font-semibold text-neon mt-0.5">
                 ≈ {totalStakedValue.toFixed(0)} {symbol}
               </p>
@@ -164,7 +164,7 @@ const StakingPage: React.FC<StakingPageProps> = ({
           </div>
           <div className="p-3 hairline-bottom flex items-start gap-2">
             <Info size={14} className="text-neon flex-shrink-0 mt-0.5" />
-            <p className="text-[11px] text-neutral-400 leading-snug">{t('staking_what_is')}</p>
+            <p className="text-[11px] text-textSecondary leading-snug">{t('staking_what_is')}</p>
           </div>
         </div>
 
@@ -180,22 +180,22 @@ const StakingPage: React.FC<StakingPageProps> = ({
                 key={ticker}
                 type="button"
                 onClick={() => handleOpenStake(ticker)}
-                className="touch-target group text-left rounded-3xl bg-card/35 p-3 hover:bg-card/55 active:scale-[0.99] transition-all min-h-[116px]"
+                className="touch-target group text-left rounded-xl bg-card border border-border p-3 hover:bg-surfaceElevated active:scale-[0.99] transition-all min-h-[116px]"
               >
                 <div className="flex items-start justify-between gap-2">
                   <span className="font-mono text-sm font-semibold text-white group-hover:text-neon transition-colors">{ticker}</span>
                   <span className="text-[10px] font-mono text-neon rounded-lg bg-neon/10 px-1.5 py-1 leading-none">~{pct}%</span>
                 </div>
-                <p className="mt-2 text-[10px] text-neutral-500 leading-snug">
+                <p className="mt-2 text-[10px] text-textMuted leading-snug">
                   {hasSpot ? `${t('available')}: ${(spot?.amount ?? 0).toFixed(6)} ${ticker}` : t('insufficient_spot')}
                 </p>
                 {position && (
-                  <p className="mt-1 text-[10px] text-neutral-400 leading-snug">
+                  <p className="mt-1 text-[10px] text-textSecondary leading-snug">
                     {t('my_staking')}: {position.amount.toFixed(6)} {ticker}
                   </p>
                 )}
                 <div className="mt-2 pt-2 hairline-top flex items-center justify-between">
-                  <span className={`text-[10px] ${hasSpot ? 'text-neon' : 'text-neutral-400'}`}>{hasSpot ? t('stake_btn') : t('spot_buy')}</span>
+                  <span className={`text-[10px] ${hasSpot ? 'text-neon' : 'text-textSecondary'}`}>{hasSpot ? t('stake_btn') : t('spot_buy')}</span>
                   <span className="text-[10px] font-mono text-neon">{hasSpot ? '→' : '+'}</span>
                 </div>
               </button>
@@ -204,19 +204,19 @@ const StakingPage: React.FC<StakingPageProps> = ({
         </div>
 
         {stakingPositions.length > 0 ? (
-          <div className="rounded-3xl bg-card/35 p-3 space-y-2">
+          <div className="rounded-xl bg-card border border-border p-3 space-y-2">
             <div className="flex items-center justify-between gap-2">
-              <p className="text-[11px] uppercase tracking-wide text-neutral-500">{t('my_staking')}</p>
-              <p className="text-[10px] text-neutral-500 font-mono">{stakingPositions.length}</p>
+              <p className="text-[11px] uppercase tracking-wide text-textMuted">{t('my_staking')}</p>
+              <p className="text-[10px] text-textMuted font-mono">{stakingPositions.length}</p>
             </div>
             {stakingPositions.map((position) => {
               const asset = liveMarket.find((item) => item.ticker === position.ticker);
               const amountUsd = (asset?.price ?? 0) * position.amount;
               return (
-                <div key={position.ticker} className="flex items-center justify-between gap-2 rounded-2xl bg-black/20 px-3 py-2.5 min-h-[56px]">
+                <div key={position.ticker} className="flex items-center justify-between gap-2 rounded-xl bg-surface px-3 py-2.5 min-h-[56px]">
                   <div>
                     <p className="text-xs font-mono text-white">{position.ticker}</p>
-                    <p className="text-[10px] text-neutral-500">
+                    <p className="text-[10px] text-textMuted">
                       {position.amount.toFixed(8)} {position.ticker} · ≈ {amountUsd.toFixed(0)} {symbol}
                     </p>
                   </div>
@@ -236,7 +236,7 @@ const StakingPage: React.FC<StakingPageProps> = ({
           </div>
         ) : (
           <div className="rounded-3xl bg-card/25 p-4 text-center">
-            <p className="text-xs text-neutral-500">{t('no_staking')}</p>
+            <p className="text-xs text-textMuted">{t('no_staking')}</p>
           </div>
         )}
       </div>

@@ -114,7 +114,7 @@ const AVATAR_COLORS = [
 // УТИЛИТЫ
 // ==========================================
 
-const P2P_ACTIVE_STORAGE_KEY = 'etoro_active_p2p_deal';
+const P2P_ACTIVE_STORAGE_KEY = 'mexc_active_p2p_deal';
 const P2P_NOTIFY_PREFIX = 'etoro_p2p_notify_v1';
 const P2P_WAIT_SECONDS = 600;
 
@@ -410,7 +410,7 @@ const DealDetailSheet: React.FC<{
           </div>
 
           {/* Cent Addition & comment Warning */}
-          <div className="mb-4 p-3 rounded-xl border border-white/[0.06] bg-white/[0.02] text-textSecondary text-xs leading-relaxed flex gap-2">
+          <div className="mb-4 p-3 rounded-xl border border-border bg-surface text-textSecondary text-xs leading-relaxed flex gap-2">
             <AlertCircle size={14} className="shrink-0 text-textSecondary mt-0.5" />
             <div className="text-textSecondary text-[11px]">
               <span className="font-semibold text-textPrimary block mb-0.5">Обратите внимание:</span>
@@ -422,7 +422,7 @@ const DealDetailSheet: React.FC<{
           <button
             onClick={() => onOpen(deal, parsedAmount)}
             disabled={opening || !inputAmount || !isAmountValid}
-            className="w-full py-3 rounded-full font-bold text-sm text-black flex items-center justify-center gap-2 transition-all active:scale-[0.96] disabled:opacity-40 bg-neon hover:brightness-110 shadow-lg shadow-neon/10"
+            className="w-full py-3 rounded-full font-bold text-sm text-black flex items-center justify-center gap-2 transition-all active:scale-[0.96] disabled:opacity-40 bg-neon hover:brightness-110 "
           >
             {opening ? (
               <Loader2 size={16} className="animate-spin" />
@@ -975,7 +975,7 @@ const DepositPage: React.FC<DepositPageProps> = ({ onBack, onDeposit, onHideNav 
       {/* P2P Deals */}
       <button
         onClick={() => { Haptic.light(); setStep('P2P_DEALS'); }}
-        className="w-full flex items-center gap-3 rounded-2xl p-3.5 transition-etoro active:scale-[0.98] hover:bg-white/[0.04] bg-white/[0.03]"
+        className="w-full flex items-center gap-3 rounded-2xl p-3.5 transition-etoro active:scale-[0.98] hover:bg-surfaceElevated bg-surface"
       >
         <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 text-neon bg-neon/[0.08]">
           <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden {...iconStroke}>
@@ -998,7 +998,7 @@ const DepositPage: React.FC<DepositPageProps> = ({ onBack, onDeposit, onHideNav 
       {/* Crypto */}
       <button
         onClick={() => { Haptic.light(); setStep('NETWORK'); }}
-        className="w-full flex items-center gap-3 rounded-2xl p-3.5 transition-etoro active:scale-[0.98] hover:bg-white/[0.04] bg-white/[0.03]"
+        className="w-full flex items-center gap-3 rounded-2xl p-3.5 transition-etoro active:scale-[0.98] hover:bg-surfaceElevated bg-surface"
       >
         <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 text-neon bg-neon/[0.08]">
           <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden {...iconStroke}>
@@ -1045,7 +1045,7 @@ const DepositPage: React.FC<DepositPageProps> = ({ onBack, onDeposit, onHideNav 
             label: 'Выгодно',
           },
         ].map(({ svg, label }) => (
-          <div key={label} className="flex flex-col items-center gap-1.5 py-2.5 rounded-xl bg-white/[0.025]">
+          <div key={label} className="flex flex-col items-center gap-1.5 py-2.5 rounded-xl bg-surface">
             {svg}
             <span className="text-[10px] text-textMuted">{label}</span>
           </div>
@@ -1086,7 +1086,7 @@ const DepositPage: React.FC<DepositPageProps> = ({ onBack, onDeposit, onHideNav 
             <button
               type="button"
               onClick={() => { Haptic.tap(); setIsCountryModalOpen(true); }}
-              className="shrink-0 h-11 min-w-[5.75rem] px-3 rounded-2xl bg-white/[0.05] text-[12px] font-semibold text-textPrimary flex items-center justify-center gap-2 active:scale-[0.99] transition-transform hover:bg-white/[0.075]"
+              className="shrink-0 h-11 min-w-[5.75rem] px-3 rounded-2xl bg-surface border border-border text-[12px] font-semibold text-textPrimary flex items-center justify-center gap-2 active:scale-[0.99] transition-all hover:bg-surfaceElevated"
               aria-label="Выбрать страну/валюту"
             >
               <span className="text-[16px] leading-none" aria-hidden>
@@ -1113,7 +1113,7 @@ const DepositPage: React.FC<DepositPageProps> = ({ onBack, onDeposit, onHideNav 
 
             <div
               className={`flex-1 min-w-0 h-11 flex items-center gap-2 rounded-2xl px-3 transition-colors ${
-                isBelowMin ? 'bg-down/[0.08]' : 'bg-white/[0.05]'
+                isBelowMin ? 'bg-down/[0.08]' : 'bg-surface'
               }`}
               style={
                 isBelowMin
@@ -1166,7 +1166,7 @@ const DepositPage: React.FC<DepositPageProps> = ({ onBack, onDeposit, onHideNav 
         </div>
 
         <div
-          className="flex-1 min-h-0 overflow-y-auto no-scrollbar overscroll-contain border-t border-white/[0.05]"
+          className="flex-1 min-h-0 overflow-y-auto no-scrollbar overscroll-contain border-t border-border"
           style={{ WebkitOverflowScrolling: 'touch' } as React.CSSProperties}
         >
           {p2pDeals.length === 0 ? (
@@ -1181,7 +1181,7 @@ const DepositPage: React.FC<DepositPageProps> = ({ onBack, onDeposit, onHideNav 
                   key={deal.id}
                   type="button"
                   onClick={() => { Haptic.tap(); setSelectedDeal(deal); }}
-                  className="w-full text-left px-3 py-3 active:bg-white/[0.03] transition-colors"
+                  className="w-full text-left px-3 py-3 active:bg-surfaceElevated transition-colors"
                 >
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0 flex-1">
@@ -1340,7 +1340,7 @@ const DepositPage: React.FC<DepositPageProps> = ({ onBack, onDeposit, onHideNav 
       </div>
 
       {p2pWaitTimeLeft === 0 && (
-        <div className="w-full max-w-sm p-4 rounded-2xl mb-4 bg-white/[0.03] border border-white/[0.08]">
+        <div className="w-full max-w-sm p-4 rounded-2xl mb-4 bg-card border border-border">
           <AlertCircle size={18} className="mx-auto mb-2 text-textSecondary" />
           <p className="text-sm text-textSecondary mb-3">Продавец не ответил</p>
           <button className="w-full py-3 rounded-card font-semibold text-sm text-black bg-neon" onClick={() => { Haptic.tap(); cancelActiveP2PAndGoToDeals(); }}>
@@ -1414,7 +1414,7 @@ const DepositPage: React.FC<DepositPageProps> = ({ onBack, onDeposit, onHideNav 
           </div>
         </div>
 
-        <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl mb-3 shrink-0 bg-white/[0.03] border border-white/[0.07]">
+        <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl mb-3 shrink-0 bg-card border border-border">
           <AlertCircle size={13} className="text-textSecondary mt-0.5 shrink-0" />
           <span className="text-[11px] text-textSecondary">
             Отправляйте <strong>точно</strong> {activeDeal?.amount.toLocaleString('ru-RU')} {currSym}.
@@ -1423,31 +1423,30 @@ const DepositPage: React.FC<DepositPageProps> = ({ onBack, onDeposit, onHideNav 
         </div>
 
         {p2pPaymentDetails && (
-          <div className="rounded-2xl overflow-hidden mb-3 shrink-0" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
-            <div className="px-4 py-3 flex items-center gap-2" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'rgba(0,200,83,0.05)' }}>
-              <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
-              <span className="text-xs font-semibold text-green-400 uppercase tracking-wider">Реквизиты получателя</span>
+          <div className="rounded-xl overflow-hidden mb-3 shrink-0 bg-card border border-border">
+            <div className="px-4 py-2.5 flex items-center gap-2 border-b border-border">
+              <span className="text-[10px] font-semibold text-textMuted uppercase tracking-wider">Реквизиты получателя</span>
             </div>
             <div className="px-4 py-3">
-              <div className="font-mono text-sm text-white whitespace-pre-wrap break-words bg-black/20 rounded-xl p-3 mb-2" style={{ border: '1px dashed rgba(255,255,255,0.1)' }}>
+              <div className="font-mono text-sm text-textPrimary whitespace-pre-wrap break-words bg-surface rounded-lg p-3 mb-3">
                 {p2pPaymentDetails.requisites}
               </div>
-          <button
-            className="flex items-center gap-1.5 text-xs text-neon"
-            onClick={() => { navigator.clipboard.writeText(p2pPaymentDetails.requisites); Haptic.tap(); toast.show('Скопировано', 'success'); }}
-          >
-            <Copy size={12} /> Копировать реквизиты
-          </button>
+              <button
+                className="flex items-center gap-1.5 text-xs text-textSecondary hover:text-textPrimary transition-colors"
+                onClick={() => { navigator.clipboard.writeText(p2pPaymentDetails.requisites); Haptic.tap(); toast.show('Скопировано', 'success'); }}
+              >
+                <Copy size={12} /> Копировать реквизиты
+              </button>
             </div>
 
             {p2pPaymentDetails.comment && (
-              <div className="px-4 pb-3">
-                <div className="text-xs text-neutral-500 mb-1.5">Комментарий к переводу</div>
-                <div className="font-mono text-sm text-textPrimary bg-surface rounded-xl p-3 mb-2 border border-white/[0.06]">
+              <div className="px-4 pb-3 border-t border-border pt-3">
+                <div className="text-[10px] text-textMuted uppercase tracking-wide mb-1.5">Комментарий к переводу</div>
+                <div className="font-mono text-sm text-textPrimary bg-surface rounded-lg p-3 mb-2">
                   {p2pPaymentDetails.comment}
                 </div>
                 <button
-                  className="flex items-center gap-1.5 text-xs text-neon"
+                  className="flex items-center gap-1.5 text-xs text-textSecondary hover:text-textPrimary transition-colors"
                   onClick={() => { navigator.clipboard.writeText(p2pPaymentDetails.comment); Haptic.tap(); toast.show('Скопировано', 'success'); }}
                 >
                   <Copy size={12} /> Копировать комментарий

@@ -33,7 +33,7 @@ const MarketTicker: React.FC = () => {
   }, []);
 
   return (
-    <div className="w-full overflow-hidden rounded-xl bg-white/[0.02] border border-white/[0.04] px-3 py-1.5">
+    <div className="w-full overflow-hidden rounded-xl bg-surface border border-border px-3 py-1.5">
       <div className="text-[9px] text-textSubtle uppercase tracking-wider mb-0.5">{t('last_trades')}</div>
       <div className="flex flex-wrap gap-x-3 gap-y-0.5">
         {items.map((item, i) => (

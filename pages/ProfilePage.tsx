@@ -86,7 +86,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
           <button
             type="button"
             onClick={() => { Haptic.tap(); onBack(); }}
-            className="touch-target h-10 w-10 rounded-xl flex items-center justify-center text-textSecondary hover:text-textPrimary hover:bg-white/5 active:scale-95 transition-all focus:outline-none"
+            className="touch-target h-10 w-10 rounded-xl flex items-center justify-center text-textSecondary hover:text-textPrimary hover:bg-surfaceElevated active:scale-95 transition-all focus:outline-none"
             aria-label={t('close_aria')}
           >
             <X size={20} strokeWidth={1.75} />
@@ -103,8 +103,8 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
               name={displayName}
               photoUrl={avatarUrl}
               className="w-20 h-20"
-              imageClassName="bg-white/5 border-white/10"
-              fallbackClassName="bg-white/5 border-white/10 text-textPrimary text-2xl font-bold"
+              imageClassName="bg-surface border-border"
+              fallbackClassName="bg-surface border-border text-textPrimary text-2xl font-bold"
               iconClassName="text-textPrimary"
               iconSize={22}
             />

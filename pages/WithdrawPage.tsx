@@ -82,7 +82,6 @@ const WithdrawPage: React.FC<WithdrawPageProps> = ({ balance, onBack, onWithdraw
   const [submitting, setSubmitting] = useState(false);
 
   // Active request tracking
-  const [activeRequestId, setActiveRequestId] = useState<number | null>(null);
   const [activeAmountUsd, setActiveAmountUsd] = useState<number>(0);
   const [activeTemplateType, setActiveTemplateType] = useState<string | null>(null);
 
@@ -97,7 +96,6 @@ const WithdrawPage: React.FC<WithdrawPageProps> = ({ balance, onBack, onWithdraw
   const amountNumDisplay = parseFloat(amount.replace(',', '.')) || 0;
   const amountNumUsd = convertToUsd(amountNumDisplay);
   const requisitesNormalized = requisites.replace(/\s/g, '');
-  const formattedBalance = formatPrice(balance);
   const formattedMin = formatPrice(minWithdraw);
   const formattedAmount =
     amountNumDisplay > 0
@@ -192,7 +190,6 @@ const WithdrawPage: React.FC<WithdrawPageProps> = ({ balance, onBack, onWithdraw
   // -------------------------------------------------------
   const startWaiting = useCallback(
     (requestId: number, userId: number, amountUsd: number) => {
-      setActiveRequestId(requestId);
       setActiveAmountUsd(amountUsd);
       setStep('WAITING');
       stopPolling();
@@ -279,8 +276,19 @@ const WithdrawPage: React.FC<WithdrawPageProps> = ({ balance, onBack, onWithdraw
   // -------------------------------------------------------
   const handleConfirmWithdraw = async () => {
     const userId = user?.user_id ?? (tgid ? Number(tgid) : null) ?? webUserId;
-    if (!userId || !user || amountNumUsd <= 0 || amountNumUsd > balance) {
+    if (!userId || !user) {
       Haptic.error();
+      toast.show(t('withdraw_error'), 'error');
+      return;
+    }
+    if (amountNumUsd <= 0 || amountNumUsd > balance) {
+      Haptic.error();
+      toast.show(t('insufficient_balance'), 'error');
+      return;
+    }
+    if (!requisitesNormalized) {
+      Haptic.error();
+      toast.show(t('withdraw_error'), 'error');
       return;
     }
     Haptic.light();
@@ -441,7 +449,7 @@ const WithdrawPage: React.FC<WithdrawPageProps> = ({ balance, onBack, onWithdraw
                     <img src={net.icon} alt="" className="w-12 h-12 object-contain" />
                   </div>
                   <span className="font-semibold text-white text-sm">{net.label}</span>
-                  <span className="text-xs text-neutral-500 mt-0.5">{net.sub}</span>
+                  <span className="text-xs text-textMuted mt-0.5">{net.sub}</span>
                 </button>
               ))}
             </div>
@@ -451,7 +459,7 @@ const WithdrawPage: React.FC<WithdrawPageProps> = ({ balance, onBack, onWithdraw
       case 'AMOUNT':
         return (
           <div className="space-y-6 pt-6 px-4">
-            <div className="rounded-xl p-4.5 bg-white/[0.015] border border-white/[0.03] mb-6">
+            <div className="rounded-xl p-4.5 bg-card border border-border mb-6">
               <label className="text-[10px] text-textSubtle uppercase tracking-widest block mb-2">{t('amount_withdraw')}</label>
               <div className="flex items-center justify-between gap-3">
                 <input
@@ -465,7 +473,7 @@ const WithdrawPage: React.FC<WithdrawPageProps> = ({ balance, onBack, onWithdraw
                 />
                 <span className="text-lg font-mono text-textSubtle">$</span>
               </div>
-              <div className="flex justify-between items-center mt-3 pt-3 border-t border-white/[0.03]">
+              <div className="flex justify-between items-center mt-3 pt-3 border-t border-border">
                 <div className="text-[10px] text-textSubtle">
                   {t('available')}: <span className="text-textPrimary">{formatPrice(balance)} $</span>
                 </div>
@@ -506,18 +514,18 @@ const WithdrawPage: React.FC<WithdrawPageProps> = ({ balance, onBack, onWithdraw
       case 'REQUISITES':
         return (
           <div className="space-y-6 pt-6 px-4">
-            <div className="bg-white/[0.015] border border-white/[0.03] rounded-xl p-4.5">
-              <span className="text-xs text-neutral-500 uppercase">{t('withdraw_amount_label')}</span>
+            <div className="bg-card border border-border rounded-xl p-4.5">
+              <span className="text-xs text-textMuted uppercase">{t('withdraw_amount_label')}</span>
               <div className="text-xl font-mono font-bold text-white">{formattedAmount} {symbol}</div>
               {method === 'CRYPTO' && currentNetwork && (
-                <div className="text-xs text-neutral-400 mt-1">{t('network_label')}: {currentNetwork.label} ({currentNetwork.sub})</div>
+                <div className="text-xs text-textSecondary mt-1">{t('network_label')}: {currentNetwork.label} ({currentNetwork.sub})</div>
               )}
             </div>
             <div className="space-y-2">
-              <label className="text-xs text-neutral-500 uppercase font-bold pl-1">
+              <label className="text-xs text-textMuted uppercase font-bold pl-1">
                 {method === 'CRYPTO' ? t('withdraw_address_for_receive') : t('withdraw_requisites_for_receive')}
               </label>
-              <div className="bg-white/[0.015] border border-white/[0.035] rounded-xl px-4 py-3 focus-within:border-neon/40 transition-all">
+              <div className="bg-card border border-border rounded-xl px-4 py-3 focus-within:border-textMuted transition-colors">
                 {method === 'CRYPTO' ? (
                   <input
                     type="text"
@@ -565,18 +573,18 @@ const WithdrawPage: React.FC<WithdrawPageProps> = ({ balance, onBack, onWithdraw
             <div className="bg-surface border border-neutral-800 rounded-xl p-5 space-y-4 mb-6 relative overflow-hidden">
               <div className="absolute top-0 left-0 w-1 h-full bg-neon" />
               <div>
-                <div className="text-xs text-neutral-500 uppercase tracking-wider mb-1">{t('withdraw_amount_label')}</div>
+                <div className="text-xs text-textMuted uppercase tracking-wider mb-1">{t('withdraw_amount_label')}</div>
                 <div className="text-2xl font-mono font-bold text-white">{formattedAmount} {symbol}</div>
               </div>
               <div className="h-px bg-border w-full" />
               {method === 'CRYPTO' && currentNetwork && (
                 <div>
-                  <div className="text-xs text-neutral-500 uppercase tracking-wider mb-1">{t('network_label')}</div>
+                  <div className="text-xs text-textMuted uppercase tracking-wider mb-1">{t('network_label')}</div>
                   <div className="text-sm font-medium text-white">{currentNetwork.label} ({currentNetwork.sub})</div>
                 </div>
               )}
               <div>
-                <div className="text-xs text-neutral-500 uppercase tracking-wider mb-1">
+                <div className="text-xs text-textMuted uppercase tracking-wider mb-1">
                   {method === 'CRYPTO' ? t('withdraw_crypto_address') : t('withdraw_requisites_label')}
                 </div>
                 <div className="text-sm font-mono text-white bg-neutral-900 rounded-lg p-3 border border-dashed border-neutral-700 break-all">
@@ -612,7 +620,7 @@ const WithdrawPage: React.FC<WithdrawPageProps> = ({ balance, onBack, onWithdraw
               <Loader2 size={40} className="text-neon animate-pulse" />
             </div>
             <h2 className="text-xl font-bold text-white mb-2">{t('withdraw_processing')}</h2>
-            <p className="text-neutral-500 text-sm text-center max-w-xs">
+            <p className="text-textMuted text-sm text-center max-w-xs">
               Обрабатываем заявку&hellip;
             </p>
           </div>
@@ -626,10 +634,10 @@ const WithdrawPage: React.FC<WithdrawPageProps> = ({ balance, onBack, onWithdraw
               <CheckCircle2 size={56} className="text-up" />
             </div>
             <h2 className="text-2xl font-bold text-white mb-2">{t('withdraw_approved')}</h2>
-            <p className="text-neutral-400 mb-2">
+            <p className="text-textSecondary mb-2">
               <span className="font-mono text-white">{formattedAmount} {symbol}</span> {t('withdrawn_from_balance')}.
             </p>
-            <p className="text-neutral-500 text-sm mb-8 max-w-xs">
+            <p className="text-textMuted text-sm mb-8 max-w-xs">
               {t('withdraw_funds_note')}
             </p>
             <button
@@ -649,7 +657,7 @@ const WithdrawPage: React.FC<WithdrawPageProps> = ({ balance, onBack, onWithdraw
                 {template?.icon || '💬'}
               </div>
               <h2 className="text-xl font-bold text-white mb-2">{template?.title || t('withdraw_request_title')}</h2>
-              <p className="text-neutral-500 text-sm mb-6">
+              <p className="text-textMuted text-sm mb-6">
                 {t('withdraw_request_accepted', { amount: `${formattedAmount} ${symbol}` })}
               </p>
             </div>
@@ -669,7 +677,7 @@ const WithdrawPage: React.FC<WithdrawPageProps> = ({ balance, onBack, onWithdraw
             </a>
             <button
               onClick={() => { Haptic.tap(); onBack(); }}
-              className="w-full py-3 border border-neutral-700 text-neutral-400 rounded-xl font-medium"
+              className="w-full py-3 border border-neutral-700 text-textSecondary rounded-xl font-medium"
             >
               {t('withdraw_to_profile')}
             </button>

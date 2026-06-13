@@ -64,8 +64,8 @@ const BottomSheetFooter: React.FC<BottomSheetFooterProps> = ({
     'flex gap-3 px-4 mt-4',
     sticky
       ? (reserveBottomNav
-          ? 'sticky bottom-[calc(env(safe-area-inset-bottom)+80px)] z-[70] bg-background/95 backdrop-blur pointer-events-auto'
-          : 'sticky bottom-0 z-[70] bg-background/95 backdrop-blur pointer-events-auto')
+          ? 'sticky bottom-[calc(env(safe-area-inset-bottom)+80px)] z-[70] bg-background pointer-events-auto'
+          : 'sticky bottom-0 z-[70] bg-background pointer-events-auto')
       : '',
     reserveBottomNav ? 'pb-[calc(max(1.5rem,env(safe-area-inset-bottom))+80px)]' : 'pb-safe',
   ].join(' ');

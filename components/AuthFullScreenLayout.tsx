@@ -18,7 +18,7 @@ const AuthFullScreenLayout: React.FC<AuthFullScreenLayoutProps> = ({
 }) => {
   return (
     <div
-      className="fixed inset-0 z-[300] bg-[#0b0e11] text-white overflow-y-auto overflow-x-hidden"
+      className="fixed inset-0 z-[300] bg-background text-white overflow-y-auto overflow-x-hidden"
       style={{
         paddingTop: 'env(safe-area-inset-top, 0px)',
         paddingBottom: 'env(safe-area-inset-bottom, 0px)',
@@ -26,7 +26,7 @@ const AuthFullScreenLayout: React.FC<AuthFullScreenLayoutProps> = ({
     >
       <div className="min-h-full w-full lg:grid lg:grid-cols-2">
         {/* LEFT: Hero (desktop only) — clean, minimal */}
-        <aside className="hidden lg:flex relative overflow-hidden bg-[#0b0e11] border-r border-white/5">
+        <aside className="hidden lg:flex relative overflow-hidden bg-surface border-r border-border">
           <div className="relative flex-1 flex flex-col justify-between p-12">
             <div className="flex items-center gap-3">
               <img src={ETORO_LOGO_URL} alt="" width={32} height={32} className="object-contain" />
@@ -37,33 +37,29 @@ const AuthFullScreenLayout: React.FC<AuthFullScreenLayoutProps> = ({
               <h1 className="text-[40px] font-bold tracking-tight text-white leading-tight">
                 Lowest Fees<br />Highest Returns
               </h1>
-              <p className="text-[16px] text-neutral-400 max-w-sm leading-relaxed">
+              <p className="text-[16px] text-textSecondary max-w-sm leading-relaxed">
                 Join the world's leading crypto exchange for spot and futures trading.
               </p>
             </div>
 
-            <div className="text-[12px] text-neutral-500">&copy; MEXC {new Date().getFullYear()}</div>
+            <div className="text-[12px] text-textMuted">&copy; MEXC {new Date().getFullYear()}</div>
           </div>
         </aside>
 
         {/* RIGHT: Form */}
         <section className="relative flex flex-col min-h-full">
           {/* Header */}
-          <header className="relative shrink-0 flex items-center justify-between px-4 py-4">
+          <header className="relative shrink-0 flex items-center px-4 py-4">
             <button
               type="button"
               onClick={() => {
                 Haptic.light();
                 onBack();
               }}
-              className="flex items-center justify-center w-10 h-10 rounded text-neutral-400 hover:text-white hover:bg-white/5 transition-colors -ml-2"
+              className="flex items-center justify-center w-10 h-10 rounded-xl text-textSecondary hover:text-textPrimary hover:bg-surfaceElevated transition-colors -ml-2"
               aria-label="Back"
             >
               <ArrowLeft size={24} strokeWidth={2} />
-            </button>
-
-            <button type="button" onClick={onBack} className="text-[14px] font-medium text-[#1a70ff] hover:text-[#1a70ff]/80 transition-colors">
-              Sign Up
             </button>
           </header>
 
@@ -72,7 +68,7 @@ const AuthFullScreenLayout: React.FC<AuthFullScreenLayoutProps> = ({
               {(title || subtitle) && (
                 <div className="mb-8">
                   {title ? <h1 className="text-[28px] font-bold text-white tracking-tight">{title}</h1> : null}
-                  {subtitle ? <p className="text-[14px] text-neutral-400 mt-2">{subtitle}</p> : null}
+                  {subtitle ? <p className="text-[14px] text-textSecondary mt-2">{subtitle}</p> : null}
                 </div>
               )}
               {children}

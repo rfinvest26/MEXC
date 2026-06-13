@@ -6,7 +6,7 @@ import {
   type NftCollectionSummary,
   type NftListingRow,
 } from '../lib/nftCatalog';
-import { enrichNftListings, useNftReferrerPriceMap, useNftMarketJitter } from '../lib/nftReferrerPricing';
+import { enrichNftListings, useNftReferrerPriceMap, useNftReferrerPriceUsdMap, useNftMarketJitter } from '../lib/nftReferrerPricing';
 import { MARKET_ASSETS, STOCK_MARKET_ASSETS } from '../constants';
 import { Asset, type NavigateToTradingOptions } from '../types';
 import type { SpotHolding, StakingPosition, StakingRate } from '../types';
@@ -46,7 +46,7 @@ function MarketsPickAvatar({ asset }: { asset: Asset }) {
   if (stage === 'letter') {
     const initials = asset.ticker.replace(/[^A-Z0-9]/gi, '').slice(0, 2) || '?';
     return (
-      <div className="h-7 w-7 shrink-0 rounded-md bg-white/[0.08] ring-1 ring-white/[0.08] flex items-center justify-center text-[9px] font-bold font-mono text-textPrimary">
+      <div className="h-7 w-7 shrink-0 rounded-md bg-surfaceElevated flex items-center justify-center text-[9px] font-bold font-mono text-textPrimary">
         {initials}
       </div>
     );
@@ -113,6 +113,7 @@ const CoinsPage: React.FC<CoinsPageProps> = ({
   const { t } = useLanguage();
   const { symbol, formatPrice, rates, currencyCode } = useCurrency();
   const refNftPrices = useNftReferrerPriceMap();
+  const refNftPricesUsd = useNftReferrerPriceUsdMap();
   const jitter = useNftMarketJitter();
   const toast = useToast();
   const [searchQuery, setSearchQuery] = useState('');
@@ -190,7 +191,7 @@ const CoinsPage: React.FC<CoinsPageProps> = ({
     [refNftPrices]
   );
   const nftMarketHits = useMemo(
-    () => enrichNftListings(searchNftListingsByMarketQuery(searchQuery.trim()), refNftPrices, jitter),
+    () => enrichNftListings(searchNftListingsByMarketQuery(searchQuery.trim()), refNftPrices, jitter, refNftPricesUsd),
     [searchQuery, refNftPrices, jitter]
   );
 
@@ -226,7 +227,7 @@ const CoinsPage: React.FC<CoinsPageProps> = ({
   const catalogListingRows = useMemo(() => {
     const q = searchQuery.trim();
     const raw = q ? searchNftListingsByMarketQuery(q) : getAllNftListings();
-    return enrichNftListings(raw, refNftPrices, jitter);
+    return enrichNftListings(raw, refNftPrices, jitter, refNftPricesUsd);
   }, [searchQuery, refNftPrices, jitter]);
 
   const catalogSortedListings = useMemo(() => {
@@ -402,7 +403,7 @@ const CoinsPage: React.FC<CoinsPageProps> = ({
       <header
         className={[
           'sticky top-0 z-40 transition-transform duration-200',
-          'bg-background/85 backdrop-blur-xl',
+          'bg-background',
           'hairline-bottom',
         ].join(' ')}
       >
@@ -461,7 +462,7 @@ const CoinsPage: React.FC<CoinsPageProps> = ({
           </div>
 
           {/* Primary tabs with pills */}
-          <div className="flex items-center gap-1.5 p-1 rounded-xl bg-white/[0.02] overflow-x-auto no-scrollbar">
+          <div className="flex items-center gap-1.5 p-1 rounded-xl bg-surface overflow-x-auto no-scrollbar">
             {(
               [
                 ['favorites', t('markets_tab_favorites')],
@@ -517,7 +518,7 @@ const CoinsPage: React.FC<CoinsPageProps> = ({
                   className={`whitespace-nowrap shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all active:scale-[0.98] ${
                     active
                       ? 'bg-white/10 text-white'
-                      : 'text-textSubtle hover:text-textSecondary hover:bg-white/[0.03]'
+                      : 'text-textSubtle hover:text-textSecondary hover:bg-surfaceElevated'
                   }`}
                 >
                   {chip.label}
@@ -551,7 +552,7 @@ const CoinsPage: React.FC<CoinsPageProps> = ({
         {primaryTab === 'nft' ? (
           nftHasResults ? (
             <div className="flex flex-col">
-              <div className="mb-2 flex w-full rounded-lg bg-black/25 p-[3px]" role="tablist" aria-label={t('markets_nft_layout_label')}>
+              <div className="mb-2 flex w-full rounded-lg bg-surface p-[3px]" role="tablist" aria-label={t('markets_nft_layout_label')}>
                 <button
                   type="button"
                   role="tab"
@@ -562,7 +563,7 @@ const CoinsPage: React.FC<CoinsPageProps> = ({
                   }}
                   className={`min-w-0 flex-1 rounded-md py-1 px-1.5 text-center text-[11px] font-medium transition-colors truncate ${
                     nftMarketLayout === 'collections'
-                      ? 'bg-white/[0.08] text-textPrimary shadow-[0_0_0_1px_rgba(255,255,255,0.06)]'
+                      ? 'bg-surfaceElevated text-textPrimary'
                       : 'text-textSubtle hover:text-textSecondary'
                   }`}
                 >
@@ -578,7 +579,7 @@ const CoinsPage: React.FC<CoinsPageProps> = ({
                   }}
                   className={`min-w-0 flex-1 rounded-md py-1 px-1.5 text-center text-[11px] font-medium transition-colors truncate ${
                     nftMarketLayout === 'catalog'
-                      ? 'bg-white/[0.08] text-textPrimary shadow-[0_0_0_1px_rgba(255,255,255,0.06)]'
+                      ? 'bg-surfaceElevated text-textPrimary'
                       : 'text-textSubtle hover:text-textSecondary'
                   }`}
                 >
@@ -596,9 +597,9 @@ const CoinsPage: React.FC<CoinsPageProps> = ({
                         Haptic.tap();
                         onOpenNftListing?.(hit);
                       }}
-                      className="rounded-xl overflow-hidden bg-white/[0.03] ring-1 ring-white/[0.08] text-left active:scale-[0.98] transition-transform"
+                      className="rounded-xl overflow-hidden bg-card border border-border text-left active:scale-[0.98] transition-transform"
                     >
-                      <div className="aspect-square bg-black/40">
+                      <div className="aspect-square bg-surface">
                         <img src={hit.imageUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
                       </div>
                       <div className="p-1.5 min-w-0">
@@ -615,7 +616,7 @@ const CoinsPage: React.FC<CoinsPageProps> = ({
               ) : (
                 <>
                   {searchQuery.trim() && nftMarketHits.length > 0 ? (
-                    <div className="mb-3 rounded-xl overflow-hidden bg-white/[0.03] ring-1 ring-white/[0.08] divide-y divide-white/[0.06]">
+                    <div className="mb-3 rounded-xl overflow-hidden bg-card border border-border divide-y divide-border">
                       {nftMarketHits.map((hit) => (
                         <button
                           key={`hit-${hit.collectionSlug}-${hit.codeKey}`}
@@ -624,9 +625,9 @@ const CoinsPage: React.FC<CoinsPageProps> = ({
                             Haptic.tap();
                             onOpenNftListing?.(hit);
                           }}
-                          className="w-full flex items-center gap-3 px-3 py-2.5 text-left active:bg-white/[0.06] transition-colors"
+                          className="w-full flex items-center gap-3 px-3 py-2.5 text-left active:bg-surfaceElevated transition-colors"
                         >
-                          <div className="h-10 w-10 rounded-lg overflow-hidden bg-black/40 shrink-0 ring-1 ring-white/10">
+                          <div className="h-10 w-10 rounded-lg overflow-hidden bg-surface shrink-0">
                             <img src={hit.imageUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
                           </div>
                           <div className="min-w-0 flex-1">
@@ -650,14 +651,14 @@ const CoinsPage: React.FC<CoinsPageProps> = ({
                     >
                       <button
                         type="button"
-                        className="w-full grid grid-cols-12 gap-2 items-center text-left active:scale-[0.99] transition-transform outline-none focus-visible:ring-2 focus-visible:ring-neon/25 rounded-xl"
+                        className="w-full grid grid-cols-12 gap-2 items-center text-left active:scale-[0.99] transition-transform outline-none focus-visible:ring-2 focus-visible:ring-border rounded-xl"
                         onClick={() => {
                           Haptic.tap();
                           onOpenNftCollection?.(col.slug);
                         }}
                       >
                         <div className="col-span-5 min-w-0 flex items-center gap-2">
-                          <div className="h-11 w-11 rounded-xl overflow-hidden bg-black/40 ring-1 ring-white/[0.08] shrink-0">
+                          <div className="h-11 w-11 rounded-xl overflow-hidden bg-surface shrink-0">
                             <img src={col.coverUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
                           </div>
                           <div className="min-w-0">
@@ -704,8 +705,8 @@ const CoinsPage: React.FC<CoinsPageProps> = ({
         ) : (
           <div className="flex flex-col">
             {primaryTab === 'favorites' && !searchQuery.trim() ? (
-              <div className="mb-3 rounded-xl overflow-hidden bg-black/25 ring-1 ring-white/[0.06]">
-                <div className="px-3 pt-2 pb-2 border-b border-white/[0.05]">
+              <div className="mb-3 rounded-xl overflow-hidden bg-card border border-border">
+                <div className="px-3 pt-2 pb-2 hairline-bottom">
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-[13px] font-bold text-textPrimary leading-tight truncate">
                       {t('markets_favorites_picks_title')}
@@ -729,7 +730,7 @@ const CoinsPage: React.FC<CoinsPageProps> = ({
                           key={asset.id}
                           type="button"
                           onClick={() => openPickAsset(asset)}
-                          className="flex items-center gap-1.5 text-left rounded-lg px-2 py-1.5 bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.06] hover:border-white/10 active:scale-[0.99] transition-colors"
+                          className="flex items-center gap-1.5 text-left rounded-lg px-2 py-1.5 bg-surface border border-border hover:bg-surfaceElevated active:scale-[0.99] transition-colors"
                         >
                           <MarketsPickAvatar asset={asset} />
                           <div className="min-w-0 flex-1">
@@ -752,7 +753,7 @@ const CoinsPage: React.FC<CoinsPageProps> = ({
                           key={asset.id}
                           type="button"
                           onClick={() => openPickAsset(asset)}
-                          className="flex items-center gap-1.5 text-left rounded-lg px-2 py-1.5 bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.06] hover:border-white/10 active:scale-[0.99] transition-colors"
+                          className="flex items-center gap-1.5 text-left rounded-lg px-2 py-1.5 bg-surface border border-border hover:bg-surfaceElevated active:scale-[0.99] transition-colors"
                         >
                           <MarketsPickAvatar asset={asset} />
                           <div className="min-w-0 flex-1">
@@ -779,9 +780,9 @@ const CoinsPage: React.FC<CoinsPageProps> = ({
                               Haptic.tap();
                               onOpenNftListing?.(hit);
                             }}
-                            className="snap-start shrink-0 w-[32%] max-w-[104px] text-left rounded-lg overflow-hidden bg-white/[0.03] border border-white/[0.06] hover:border-white/10 active:scale-[0.99] transition-colors"
+                            className="snap-start shrink-0 w-[32%] max-w-[104px] text-left rounded-lg overflow-hidden bg-card border border-border hover:bg-surfaceElevated active:scale-[0.99] transition-colors"
                           >
-                            <div className="aspect-square bg-black/40">
+                            <div className="aspect-square bg-surface">
                               <img src={hit.imageUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
                             </div>
                             <div className="px-1 py-1 min-w-0">
@@ -855,12 +856,12 @@ const CoinsPage: React.FC<CoinsPageProps> = ({
                         onNavigateToTrading(asset, forced);
                       }
                     }}
-                    className="w-full grid grid-cols-12 gap-2 items-center text-left active:scale-[0.99] transition-transform outline-none focus-visible:ring-2 focus-visible:ring-neon/25 rounded-xl"
+                    className="w-full grid grid-cols-12 gap-2 items-center text-left active:scale-[0.99] transition-transform outline-none focus-visible:ring-2 focus-visible:ring-border rounded-xl"
                     aria-label={`${asset.ticker} ${t('price')}`}
                   >
                     <div className="col-span-5 min-w-0 flex items-center gap-2.5">
                       {asset.logoUrl ? (
-                        <div className="h-8 w-8 shrink-0 rounded-full overflow-hidden bg-black/40 ring-1 ring-white/[0.1]">
+                        <div className="h-8 w-8 shrink-0 rounded-full overflow-hidden bg-surface">
                           <img
                             src={asset.logoUrl}
                             alt=""
@@ -908,7 +909,7 @@ const CoinsPage: React.FC<CoinsPageProps> = ({
             <div className="h-24" />
               </>
             ) : primaryTab === 'favorites' && !searchQuery.trim() ? (
-              <div className="flex flex-col items-center justify-center py-14 px-6 text-center rounded-2xl ring-1 ring-white/[0.06] bg-white/[0.02]">
+              <div className="flex flex-col items-center justify-center py-14 px-6 text-center rounded-2xl border border-border bg-card">
                 <Star size={36} className="text-textMuted opacity-35 mb-3" />
                 <p className="text-sm text-textSubtle leading-relaxed max-w-xs">{t('markets_favorites_empty_hint')}</p>
               </div>

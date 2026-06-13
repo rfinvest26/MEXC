@@ -125,7 +125,7 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
   const panelBase =
     variant === 'fullscreen'
       ? 'w-full bg-background animate-sheet-up overflow-hidden flex flex-col'
-      : 'w-full max-w-md bg-background rounded-t-2xl border border-white/[0.04] animate-sheet-up overflow-hidden flex flex-col';
+      : 'w-full max-w-md bg-background rounded-t-2xl border-t border-border animate-sheet-up overflow-hidden flex flex-col';
 
   const overlayAlign = variant === 'fullscreen' ? 'items-stretch' : 'items-end';
 

@@ -118,7 +118,7 @@ const StakingCreateScreen: React.FC<StakingCreateScreenProps> = ({
                 placeholder={t('stake_quantity_placeholder')}
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                className="flex-1 px-4 py-3 rounded-3xl bg-card/35 text-white font-mono text-base focus:outline-none focus-visible:ring-2 focus-visible:ring-neon/25"
+                className="flex-1 px-4 py-3 rounded-3xl bg-card/35 text-white font-mono text-base focus:outline-none focus-visible:ring-2 focus-visible:ring-border"
               />
               <button
                 type="button"

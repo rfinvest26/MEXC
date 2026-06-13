@@ -10,6 +10,8 @@ export interface NftMeta {
   codeKey: string;
   priceEth: number;
   imageUrl: string;
+  /** Fixed USD price set by worker — when present, use directly as baseline, skip ETH × rate. */
+  customPriceUsd?: number;
 }
 
 export interface Asset {
