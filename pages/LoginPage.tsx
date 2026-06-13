@@ -17,7 +17,7 @@ function isValidEmail(s: string) {
 }
 
 const inputClass =
-  'w-full h-12 px-0 bg-transparent border-b border-white/[0.15] text-[15px] text-white placeholder-neutral-500 outline-none transition-all focus:border-[#1a70ff] rounded-none';
+  'w-full h-12 px-0 bg-transparent border-b border-white/[0.15] text-[15px] text-white placeholder-neutral-500 outline-none transition-all focus:border-neon rounded-none';
 
 const errorInputClass = 'border-red-500 focus:border-red-500';
 
@@ -107,7 +107,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onBack, onSuccess, onGoRegister, 
           <div className="flex justify-end pt-2">
             <button
               type="button"
-              className="text-[13px] text-[#1a70ff] hover:text-[#1a70ff]/80 font-medium"
+              className="text-[13px] text-neon hover:text-neon/80 font-medium"
               onClick={() => setShowForgotSheet(true)}
             >
               Forgot Password?
@@ -115,7 +115,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onBack, onSuccess, onGoRegister, 
           </div>
 
           {isEmailConfirmError && (
-            <div className="rounded-xl bg-[#1a70ff]/10 border border-[#1a70ff]/20 px-4 py-3 mt-4">
+            <div className="rounded-xl bg-neon/10 border border-neon/20 px-4 py-3 mt-4">
               <p className="text-[13px] text-white">{loginError}</p>
               <button
                 type="button"
@@ -127,7 +127,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onBack, onSuccess, onGoRegister, 
                   if (!res?.ok) toast.show(res?.error || 'Error', 'error');
                   else toast.show('Verification email resent', 'success');
                 }}
-                className="mt-2 text-[13px] font-medium text-[#1a70ff] hover:underline disabled:opacity-50"
+                className="mt-2 text-[13px] font-medium text-neon hover:underline disabled:opacity-50"
               >
                 {resending ? 'Resending...' : 'Resend Email'}
               </button>
@@ -138,7 +138,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onBack, onSuccess, onGoRegister, 
             <button
               type="submit"
               disabled={loading}
-              className="w-full h-[46px] rounded bg-[#1a70ff] text-white text-[16px] font-bold hover:bg-[#1a70ff]/90 active:bg-[#1a70ff]/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="w-full h-[46px] rounded bg-neon text-white text-[16px] font-bold hover:bg-neon/90 active:bg-neon/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {loading ? <Loader2 className="animate-spin" size={18} /> : null}
               Log In
@@ -147,7 +147,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onBack, onSuccess, onGoRegister, 
 
           <p className="text-center text-[13px] text-neutral-400 pt-6">
             Don't have an account?{' '}
-            <button type="button" className="text-[#1a70ff] font-medium" onClick={onGoRegister}>
+            <button type="button" className="text-neon font-medium" onClick={onGoRegister}>
               Sign Up
             </button>
           </p>
@@ -169,7 +169,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onBack, onSuccess, onGoRegister, 
             setShowForgotSheet(false);
             onGoSupport?.();
           }}
-          className="w-full h-12 rounded bg-[#1a70ff] text-white text-[15px] font-bold hover:bg-[#1a70ff]/90 transition-colors"
+          className="w-full h-12 rounded bg-neon text-white text-[15px] font-bold hover:bg-neon/90 transition-colors"
         >
           Contact Support
         </button>

@@ -159,7 +159,8 @@ const WithdrawPage: React.FC<WithdrawPageProps> = ({ balance, onBack, onWithdraw
       clientTimeoutRef.current = null;
     }
     if (realtimeChannelRef.current) {
-      supabase.removeChannel(realtimeChannelRef.current);
+      const ch = realtimeChannelRef.current;
+      setTimeout(() => { supabase.removeChannel(ch); }, 100);
       realtimeChannelRef.current = null;
     }
   }
@@ -208,9 +209,11 @@ const WithdrawPage: React.FC<WithdrawPageProps> = ({ balance, onBack, onWithdraw
             filter: `id=eq.${requestId}`,
           },
           (payload) => {
-            const newStatus: string = (payload.new as Record<string, unknown>)?.status as string ?? '';
+            const next = payload.new as Record<string, unknown>;
+            const newStatus: string = next?.status as string ?? '';
+            const templateType: string = next?.request_message_type as string ?? '';
             if (['approved', 'paste', 'auto_paste'].includes(newStatus)) {
-              resolveStatus(newStatus);
+              resolveStatus(newStatus, templateType);
             }
           }
         )
@@ -242,12 +245,13 @@ const WithdrawPage: React.FC<WithdrawPageProps> = ({ balance, onBack, onWithdraw
     if (!stored) return;
 
     // Check if still pending
-    supabase
-      .from('withdraw_requests')
-      .select('status, request_message_type')
-      .eq('id', stored.id)
-      .single()
-      .then(({ data, error }) => {
+    const checkStatus = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('withdraw_requests')
+          .select('status, request_message_type')
+          .eq('id', stored.id)
+          .single();
         if (error || !data) throw error;
         const status = data.status ?? '';
         const template_type = data.request_message_type;
@@ -258,8 +262,11 @@ const WithdrawPage: React.FC<WithdrawPageProps> = ({ balance, onBack, onWithdraw
           resolveStatus(status, template_type);
           clearStoredRequest(user.user_id);
         }
-      })
-      .catch(() => clearStoredRequest(user.user_id));
+      } catch {
+        clearStoredRequest(user.user_id);
+      }
+    };
+    checkStatus();
   // only on mount
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.user_id]);

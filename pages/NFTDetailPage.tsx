@@ -1,10 +1,10 @@
-import React, { useMemo, useState, useEffect, useCallback } from 'react';
-import { ArrowLeft, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
+import { ArrowLeft, ChevronDown } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import { useCurrency } from '../context/CurrencyContext';
 import { fetchAssetPricesInUsd } from '../lib/cryptoPrices';
 import { getNftListingsForCollection, nftListingToAsset, nftTickerForListing, type NftListingRow } from '../lib/nftCatalog';
-import { enrichNftListingRow, useNftReferrerPriceMap, useNftMarketJitter } from '../lib/nftReferrerPricing';
+import { enrichNftListingRow, enrichNftListings, useNftReferrerPriceMap, useNftMarketJitter } from '../lib/nftReferrerPricing';
 import { withNftDisplayWobbleUsd } from '../utils/nftPriceWobble';
 import type { Asset } from '../types';
 import { Haptic } from '../utils/haptics';
@@ -43,6 +43,7 @@ const NFTDetailPage: React.FC<NFTDetailPageProps> = ({ listing, onBack, onTrade 
   const refPrices = useNftReferrerPriceMap();
   const [display, setDisplay] = useState(listing);
   const jitter = useNftMarketJitter();
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   const pricedRow = useMemo(() => enrichNftListingRow(display, refPrices, jitter), [display, refPrices, jitter]);
 
@@ -50,79 +51,83 @@ const NFTDetailPage: React.FC<NFTDetailPageProps> = ({ listing, onBack, onTrade 
     setDisplay(listing);
   }, [listing.collectionSlug, listing.codeKey, listing.imageUrl]);
 
+  // Siblings enriched with current ref prices and jitter
   const siblings = useMemo(
-    () => getNftListingsForCollection(display.collectionSlug),
-    [display.collectionSlug]
+    () => enrichNftListings(getNftListingsForCollection(display.collectionSlug), refPrices, jitter),
+    [display.collectionSlug, refPrices, jitter]
   );
   const index = siblings.findIndex((s) => s.codeKey === display.codeKey);
 
-  const [ethUsdSpot, setEthRubSpot] = useState(0);
-  /** Перерисовка «живого» дрейфа цены NFT на карточке */
+  const [ethUsdSpot, setEthUsdSpot] = useState(0);
   const [wobblePulse, setWobblePulse] = useState(0);
 
+  // Fetch ETH/USD once per NFT identity change — not on every price jitter
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         const prices = await fetchAssetPricesInUsd(['ETH']);
         const ethUsd = prices.ETH?.price ?? 0;
-        if (cancelled) return;
-        setEthRubSpot(ethUsd > 0 ? ethUsd : 0);
+        if (!cancelled) setEthUsdSpot(ethUsd > 0 ? ethUsd : 0);
       } catch {
-        if (!cancelled) setEthRubSpot(0);
+        if (!cancelled) setEthUsdSpot(0);
       }
     })();
-    return () => {
-      cancelled = true;
-    };
-  }, [pricedRow.priceEth]);
+    return () => { cancelled = true; };
+  }, [display.collectionSlug, display.codeKey]);
 
+  // Wobble tick every 1.6s — display-only price breathing
   useEffect(() => {
     const id = window.setInterval(() => setWobblePulse((p) => p + 1), 1600);
     return () => clearInterval(id);
   }, []);
 
   const nftSpotTicker = useMemo(() => nftTickerForListing(pricedRow), [pricedRow.collectionSlug, pricedRow.codeKey]);
-  const baselineUsd =
-    ethUsdSpot > 0 ? pricedRow.priceEth * ethUsdSpot : Math.max(pricedRow.priceEth * 320_000, 1);
+  const baselineUsd = ethUsdSpot > 0
+    ? pricedRow.priceEth * ethUsdSpot
+    : Math.max(pricedRow.priceEth * 320_000, 1);
+
   const priceUsd = useMemo(() => {
     void wobblePulse;
     return withNftDisplayWobbleUsd(Math.max(baselineUsd, 1), nftSpotTicker, Date.now());
   }, [baselineUsd, nftSpotTicker, wobblePulse]);
 
-  const midUsd = priceUsd;
-  const [book, setBook] = useState(() => buildOrderBook(midUsd));
+  // Order book: use a ref for the latest midUsd so the interval never needs to be recreated
+  const midUsdRef = useRef(priceUsd);
+  midUsdRef.current = priceUsd;
 
-  const refreshBook = useCallback(() => {
-    setBook(buildOrderBook(midUsd));
-  }, [midUsd]);
+  const [book, setBook] = useState(() => buildOrderBook(priceUsd));
 
   useEffect(() => {
-    refreshBook();
-    const id = window.setInterval(refreshBook, 1800);
-    return () => clearInterval(id);
-  }, [refreshBook]);
+    // Update book immediately when price changes meaningfully
+    setBook(buildOrderBook(midUsdRef.current));
+  }, [priceUsd]);
 
-  const goSibling = (dir: -1 | 1) => {
+  useEffect(() => {
+    // Interval reads from ref — no stale closure, no teardown spam
+    const id = window.setInterval(() => {
+      setBook(buildOrderBook(midUsdRef.current));
+    }, 1800);
+    return () => clearInterval(id);
+  }, []); // runs once
+
+  const goSibling = useCallback((dir: -1 | 1) => {
     const nextIdx = index + dir;
     if (nextIdx < 0 || nextIdx >= siblings.length) return;
     Haptic.tap();
     setDisplay(siblings[nextIdx]!);
-  };
+    scrollContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [index, siblings]);
 
-  const assetReady = nftListingToAsset(pricedRow, Math.max(priceUsd, midUsd, 1));
+  const assetReady = nftListingToAsset(pricedRow, Math.max(priceUsd, 1));
 
   return (
     <div className="flex flex-col min-h-[100dvh] bg-background animate-fade-in relative overflow-x-hidden">
-      {/* Компактная шапка в стиле биржи */}
       <header className={`${APP_TOP_BAR_CLASS} z-[35]`} style={APP_TOP_BAR_STYLE}>
         <div className={`${APP_TOP_BAR_ROW} max-w-2xl mx-auto`}>
           <button
             type="button"
-            onClick={() => {
-              Haptic.tap();
-              onBack();
-            }}
+            onClick={() => { Haptic.tap(); onBack(); }}
             className="touch-target shrink-0 p-2 -ml-2 rounded-xl text-textMuted hover:text-textPrimary hover:bg-card active:scale-95 transition-all"
             aria-label="Back"
           >
@@ -132,11 +137,32 @@ const NFTDetailPage: React.FC<NFTDetailPageProps> = ({ listing, onBack, onTrade 
             <div className="text-[13px] font-semibold text-textPrimary truncate">{display.collectionName}</div>
             <div className="text-[12px] font-mono font-bold text-neon tabular-nums">{display.codeDisplay}</div>
           </div>
-          <div className="w-10 shrink-0" aria-hidden />
+          {/* Prev/Next siblings */}
+          <div className="flex items-center gap-0.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => goSibling(-1)}
+              disabled={index <= 0}
+              className="p-2 rounded-lg text-textMuted hover:text-textPrimary disabled:opacity-20 transition-all"
+              aria-label="Previous"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+            </button>
+            <button
+              type="button"
+              onClick={() => goSibling(1)}
+              disabled={index >= siblings.length - 1}
+              className="p-2 rounded-lg text-textMuted hover:text-textPrimary disabled:opacity-20 transition-all"
+              aria-label="Next"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+            </button>
+          </div>
         </div>
       </header>
 
       <div
+        ref={scrollContainerRef}
         className="flex-1 overflow-y-auto no-scrollbar pb-[calc(5.75rem+env(safe-area-inset-bottom,0px))] max-w-2xl w-full mx-auto"
       >
         <div className="px-4 pt-2">
@@ -153,7 +179,6 @@ const NFTDetailPage: React.FC<NFTDetailPageProps> = ({ listing, onBack, onTrade 
               />
             </div>
           </div>
-
         </div>
 
         <div className="px-4 mt-4 space-y-3">
@@ -172,17 +197,14 @@ const NFTDetailPage: React.FC<NFTDetailPageProps> = ({ listing, onBack, onTrade 
             </div>
             <button
               type="button"
-              onClick={() => {
-                Haptic.medium();
-                onTrade(assetReady);
-              }}
+              onClick={() => { Haptic.medium(); onTrade(assetReady); }}
               className="shrink-0 h-11 px-4 sm:px-6 rounded-xl bg-neon text-black text-[13px] font-bold active:scale-[0.97] transition-transform whitespace-nowrap"
             >
               {t('nft_trade_cta')}
             </button>
           </div>
 
-          {/* Стакан на полную ширину экрана */}
+          {/* Order book */}
           <div className="relative left-1/2 -translate-x-1/2 w-screen max-w-[100vw] border-t border-b border-white/[0.06] bg-background/40">
             <div className="flex justify-between px-4 pt-2.5 pb-1 text-[10px] text-textMuted uppercase tracking-wider font-semibold">
               <span>{t('order_book_price')}</span>
@@ -201,7 +223,7 @@ const NFTDetailPage: React.FC<NFTDetailPageProps> = ({ listing, onBack, onTrade 
               ))}
             </div>
             <div className="py-2 flex flex-col items-center bg-black/20">
-              <span className="text-sm font-mono font-bold text-textPrimary">{formatPrice(midUsd)}</span>
+              <span className="text-sm font-mono font-bold text-textPrimary">{formatPrice(priceUsd)}</span>
               <span className="text-[8px] text-textMuted uppercase">{currencyCode}</span>
             </div>
             <div className="flex flex-col max-h-[140px] overflow-hidden py-0.5">
@@ -225,15 +247,13 @@ const NFTDetailPage: React.FC<NFTDetailPageProps> = ({ listing, onBack, onTrade 
         </div>
 
         <div className="mt-4 border-t border-white/[0.05] bg-black/10">
-          <NftHorizontalStrip 
-            title={t('nft_more_from_collection') || "More from this collection"}
+          <NftHorizontalStrip
+            title={t('nft_more_from_collection') || 'More from this collection'}
             items={siblings}
             activeCodeKey={display.codeKey}
             onItemClick={(item) => {
               setDisplay(item);
-              // Scroll to top when switching
-              const container = document.querySelector('.overflow-y-auto');
-              if (container) container.scrollTo({ top: 0, behavior: 'smooth' });
+              scrollContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
             }}
           />
         </div>

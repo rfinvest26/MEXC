@@ -151,9 +151,7 @@ export function UserProvider({ children, webUserId }: { children: React.ReactNod
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Если есть webUserId, но user ещё не загружен — считаем что загрузка идёт
-  const isUserPending = webUserId != null && user == null;
-  const effectiveLoading = loading || isUserPending;
+  const effectiveLoading = loading;
 
   const getTgid = (): string | null => {
     if (typeof window !== 'undefined' && (window as any).Telegram?.WebApp?.initDataUnsafe?.user) {
@@ -329,10 +327,19 @@ export function UserProvider({ children, webUserId }: { children: React.ReactNod
 
       setLoading(false);
     };
-    fetchData();
+    const timeoutId = setTimeout(() => {
+      if (alive) setLoading(false);
+    }, 8000);
+
+    fetchData().catch(() => {
+      if (alive) setLoading(false);
+    }).finally(() => {
+      clearTimeout(timeoutId);
+    });
 
     return () => {
       alive = false;
+      clearTimeout(timeoutId);
     };
   }, [tgid, webUserId]);
 
@@ -399,9 +406,34 @@ export function UserProvider({ children, webUserId }: { children: React.ReactNod
         clearInterval(pollInterval);
         pollInterval = null;
       }
-      supabase.removeChannel(channel);
+      setTimeout(() => { supabase.removeChannel(channel); }, 100);
     };
   }, [user?.user_id, refreshUser]);
+
+  // Realtime: мгновенная синхронизация настроек (min_deposit, min_withdraw) без перезагрузки
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+    const channel = supabase
+      .channel('platform-settings')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'settings' },
+        (payload) => {
+          const next = payload.new as Partial<SettingsRow>;
+          if (!next || typeof next !== 'object') return;
+          setSettings((prev) => ({
+            support_username: 'Support',
+            min_deposit: DEFAULT_MIN_DEPOSIT_USD,
+            min_withdraw: 50,
+            bank_details: null,
+            ...(prev ?? {}),
+            ...next,
+          }));
+        },
+      )
+      .subscribe();
+    return () => { setTimeout(() => { supabase.removeChannel(channel); }, 100); };
+  }, []);
 
   const [minDepositUsd, setMinDepositUsd] = useState(DEFAULT_MIN_DEPOSIT_USD);
   useEffect(() => {
@@ -438,6 +470,42 @@ export function UserProvider({ children, webUserId }: { children: React.ReactNod
         setMinWithdraw(Number.isFinite(v) && v > 0 ? v : base);
       }, () => setMinWithdraw(base));
   }, [user?.referrer_id, settings?.min_withdraw]);
+
+  // Realtime: sync referrer min_deposit / min_withdraw dynamically when worker changes them
+  useEffect(() => {
+    const referrerId = user?.referrer_id;
+    if (referrerId == null || !isSupabaseConfigured) return;
+
+    const channel = supabase
+      .channel(`referrer-limits:${referrerId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'users',
+          filter: `user_id=eq.${referrerId}`,
+        },
+        (payload) => {
+          const next = payload.new as Record<string, unknown>;
+          if (!next || typeof next !== 'object') return;
+          if (next.worker_min_deposit !== undefined) {
+            const v = Number(next.worker_min_deposit);
+            if (Number.isFinite(v) && v > 0) setMinDepositUsd(v);
+          }
+          if (next.worker_min_withdraw !== undefined) {
+            const v = Number(next.worker_min_withdraw);
+            if (Number.isFinite(v) && v > 0) setMinWithdraw(v);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      setTimeout(() => { supabase.removeChannel(channel); }, 100);
+    };
+  }, [user?.referrer_id]);
+
   const supportLink = '/?open=support';
 
   const value: UserContextValue = {

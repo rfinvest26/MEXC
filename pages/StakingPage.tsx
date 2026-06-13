@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Gem, Info, TrendingUp } from 'lucide-react';
+import { Percent, Info, TrendingUp } from 'lucide-react';
 import type { SpotHolding, StakingPosition, StakingRate, Asset, NavigateToTradingOptions } from '../types';
 import { MARKET_ASSETS } from '../constants';
 import { useLiveAssets } from '../utils/useLiveAssets';
@@ -131,7 +131,7 @@ const StakingPage: React.FC<StakingPageProps> = ({
         title={
           <div className="flex items-center gap-2 min-w-0">
             <div className="h-9 w-9 rounded-2xl bg-card/35 flex items-center justify-center text-neon shrink-0">
-              <Gem size={18} strokeWidth={2} />
+              <Percent size={18} strokeWidth={2} />
             </div>
             <span className="truncate block">{t('staking_title')}</span>
           </div>

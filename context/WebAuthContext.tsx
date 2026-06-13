@@ -155,7 +155,7 @@ export function WebAuthProvider({ children }: { children: React.ReactNode }) {
         /^\d{5,20}$/.test(normalizedRefCode) ? Number(normalizedRefCode) : null;
       const tgUser = getTelegramMiniAppUser();
 
-      const rpc = await rpcRegisterWebUser(normalizedEmail, password, fullName, normalizedRefCode);
+      const rpc = await rpcRegisterWebUser(normalizedEmail, password, fullName, normalizedRefCode).catch(() => ({ ok: false, data: null, error: null }));
       if (rpc.ok) {
         const u = rpc.data as { user_id?: number };
         if (u?.user_id) {
@@ -182,10 +182,8 @@ export function WebAuthProvider({ children }: { children: React.ReactNode }) {
           logAction('register', { userId: nextUserId, payload: { email: normalizedEmail, refCode: normalizedRefCode || null } }).catch(() => {});
           return { ok: true };
         }
-      } else if (rpc.error) {
-        const msg = getSupabaseErrorMessage(rpc.error, 'Ошибка регистрации');
-        if (msg) return { ok: false, error: msg };
       }
+      // RPC failed or returned no user_id — fall through to direct auth.signUp path
 
       const authRes = await supabase.auth.signUp({
         email: normalizedEmail,
@@ -205,12 +203,13 @@ export function WebAuthProvider({ children }: { children: React.ReactNode }) {
           (authRes.error as any)?.statusCode;
         const msg = authRes.error.message?.toLowerCase() ?? '';
         if (status === 429 || msg.includes('rate limit') || msg.includes('too many')) {
-          return { ok: false, error: 'Слишком много попыток регистрации. Подождите 1-2 минуты и попробуйте снова.' };
+          return { ok: false, error: 'Too many registration attempts. Please wait 1–2 minutes and try again.' };
         }
-        if (msg.includes('already') && (msg.includes('registered') || msg.includes('exists'))) {
-          return { ok: false, error: 'Этот email уже зарегистрирован. Попробуйте войти.' };
+        // "Already registered" — we still try to create the users record below
+        const alreadyExists = msg.includes('already') || msg.includes('registered') || msg.includes('exists');
+        if (!alreadyExists) {
+          return { ok: false, error: getSupabaseErrorMessage(authRes.error, 'Registration failed') };
         }
-        return { ok: false, error: getSupabaseErrorMessage(authRes.error, 'Ошибка регистрации') };
       }
 
       // Генерируем user_id на основе timestamp + random — минимизируем коллизии

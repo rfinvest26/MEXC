@@ -112,7 +112,7 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
 
   const fullscreenBackdropClass =
     variant === 'fullscreen'
-      ? 'bg-[#06090e]'
+      ? 'bg-background'
       : 'bg-black/60 backdrop-blur-sm';
 
   const panelHeights =
@@ -124,7 +124,7 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
 
   const panelBase =
     variant === 'fullscreen'
-      ? 'w-full bg-[#06090e] animate-sheet-up overflow-hidden flex flex-col'
+      ? 'w-full bg-background animate-sheet-up overflow-hidden flex flex-col'
       : 'w-full max-w-md bg-background rounded-t-2xl border border-white/[0.04] animate-sheet-up overflow-hidden flex flex-col';
 
   const overlayAlign = variant === 'fullscreen' ? 'items-stretch' : 'items-end';
@@ -153,7 +153,7 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
         {/* Drag handle для partial/expandable типов */}
         {effectiveShowHandle && (
           <div className="flex justify-center pt-2 pb-1">
-            <div className="h-1 w-10 rounded-full bg-white/10" aria-hidden />
+            <div className="h-[3px] w-12 rounded-full bg-white/15" aria-hidden />
           </div>
         )}
         <div

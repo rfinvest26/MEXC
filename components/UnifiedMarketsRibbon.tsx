@@ -25,7 +25,10 @@ const UnifiedMarketsRibbon: React.FC = () => {
 
   return (
     <div className="px-2 pb-3">
-      <p className="text-[10px] text-textMuted uppercase tracking-wide font-semibold mb-1.5 px-1">{t('last_trades')}</p>
+      <div className="flex items-center gap-1.5 mb-1.5 px-1">
+        <span className="text-[10px] text-textMuted uppercase tracking-wide font-semibold">{t('last_trades')}</span>
+        <span className="live-dot ml-auto" />
+      </div>
       <div className="flex flex-col gap-1 rounded-xl bg-black/20 border border-white/[0.06] p-1.5">
         {items.map((a) => {
           const ch = a.change24h ?? 0;

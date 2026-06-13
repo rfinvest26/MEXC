@@ -191,7 +191,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentPage, onNavigate, hide
             </button>
           )}
           <div
-            className="nav-glass border-t border-white/[0.08] shadow-[0_-16px_52px_rgba(0,0,0,0.68)]"
+            className="nav-glass"
             style={{
               paddingBottom: 'env(safe-area-inset-bottom, 0px)',
             }}

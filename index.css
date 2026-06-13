@@ -25,6 +25,11 @@
   --color-icon: rgba(234, 244, 255, 0.95);
   --color-icon-muted: rgba(144, 162, 184, 0.9);
   --color-icon-subtle: rgba(107, 124, 150, 0.9);
+  --color-warning: rgba(234, 137, 0, 0.85);
+  --color-warning-bg: rgba(180, 100, 0, 0.07);
+  --color-warning-border: rgba(180, 100, 0, 0.14);
+  --color-info-bg: rgba(42, 123, 255, 0.06);
+  --color-info-border: rgba(42, 123, 255, 0.14);
   --font-family-sans: "Inter", "IBM Plex Sans", "Segoe UI", sans-serif;
   --font-family-mono: "JetBrains Mono", "SF Mono", "Menlo", monospace;
   --radius-card: 20px;
@@ -126,8 +131,9 @@ input, select, textarea { font-size: 16px !important; touch-action: manipulation
 button, a, [role="button"], .cursor-pointer { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 
 ::-webkit-scrollbar { width: 4px; height: 4px; }
-::-webkit-scrollbar-track { background: #131722; }
-::-webkit-scrollbar-thumb { background: #2A2E39; border-radius: 4px; }
+::-webkit-scrollbar-track { background: var(--color-surface); }
+::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-hairlineStrong); }
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
@@ -297,11 +303,11 @@ button, a, [role="button"], .cursor-pointer { touch-action: manipulation; -webki
 }
 
 .nav-glass {
-  background: color-mix(in oklab, var(--color-background) 92%, transparent);
+  background: rgba(0, 0, 0, 0.92);
   border-top: 1px solid rgba(255, 255, 255, 0.05);
-  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.55), 0 -1px 0 rgba(255, 255, 255, 0.04);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
 }
 
 .nav-item {
@@ -337,12 +343,24 @@ button, a, [role="button"], .cursor-pointer { touch-action: manipulation; -webki
 }
 
 .nav-dot {
-  width: 5px;
-  height: 5px;
+  width: 4px;
+  height: 4px;
   border-radius: 999px;
   background: var(--color-accent);
-  box-shadow: 0 0 0 4px color-mix(in oklab, var(--color-accent) 18%, transparent);
 }
+
+.btn-cta-full {
+  width: 100%;
+  min-height: 52px;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 16px;
+  letter-spacing: -0.01em;
+  background: var(--color-neon);
+  color: #000;
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+.btn-cta-full:active { transform: scale(0.985); opacity: 0.9; }
 
 /* =========================================/* Cards */
 .panel {
@@ -545,8 +563,93 @@ button[aria-label="Назад"], button[aria-label="Back"] {
 }
 button[aria-label="Назад"]:hover, button[aria-label="Back"]:hover {
   color: var(--color-textPrimary) !important;
-  background-color: #1b2131 !important;
+  background-color: var(--color-surfaceElevated) !important;
 }
 
+/* ==========================================
+   Live / Realtime Indicators
+   ========================================== */
 
+@keyframes live-pulse {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(0, 210, 106, 0.2); opacity: 1; }
+  50% { box-shadow: 0 0 0 6px rgba(0, 210, 106, 0.04); opacity: 0.8; }
+}
+.live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-up);
+  flex-shrink: 0;
+  animation: live-pulse 2.4s ease-in-out infinite;
+}
+.live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(0, 210, 106, 0.08);
+  border: 1px solid rgba(0, 210, 106, 0.15);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--color-up);
+  line-height: 1.6;
+}
+
+/* ==========================================
+   Desktop Layout Utilities
+   ========================================== */
+
+@media (min-width: 1024px) {
+  .desktop-grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .desktop-grid-3 {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+  .desktop-grid-4 {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+  }
+  .desktop-card-stretch {
+    height: 100%;
+  }
+  .desktop-compact-list .hover-row {
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+  .desktop-wide-table {
+    min-width: 600px;
+  }
+}
+
+/* Sidebar glass surface */
+.sidebar-glass {
+  background: color-mix(in oklab, var(--color-background) 94%, var(--color-surface));
+  border-right: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+/* Value flash (used for realtime updates) */
+.value-flash-up {
+  animation: flash-up var(--duration-flash) var(--ease-modal) forwards;
+}
+.value-flash-down {
+  animation: flash-down var(--duration-flash) var(--ease-modal) forwards;
+}
+
+/* Realtime glow on cards when updated */
+@keyframes realtime-card-pulse {
+  0% { box-shadow: 0 0 0 1px rgba(43, 130, 246, 0.4); }
+  100% { box-shadow: 0 0 0 1px transparent; }
+}
+.realtime-updated {
+  animation: realtime-card-pulse 600ms var(--ease-modal) forwards;
+}
 

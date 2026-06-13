@@ -129,32 +129,28 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
           </div>
         </div>
 
-        {/* Верификация — компактно */}
+        {/* Верификация */}
         {!isGuest && (
           <div className="mb-5">
-            <div
-              className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full border ${
-                user?.is_kyc === true
-                  ? 'bg-emerald-500/5 border-emerald-500/20'
-                  : 'bg-amber-500/5 border-amber-500/20'
-              }`}
-            >
-              {user?.is_kyc === true ? (
-                <ShieldCheck size={14} className="text-emerald-500 flex-shrink-0" />
-              ) : (
-                <ShieldAlert size={14} className="text-amber-500 flex-shrink-0" />
-              )}
-              <span className={`text-xs font-medium ${user?.is_kyc === true ? 'text-emerald-400' : 'text-amber-400'}`}>
-                {user?.is_kyc === true ? t('verified') : t('verification_required')}
-              </span>
-            </div>
-            {user?.is_kyc !== true && onNavigateToKyc && (
+            {user?.is_kyc === true ? (
+              <div className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-emerald-500/[0.06] border border-emerald-500/[0.18]">
+                <ShieldCheck size={18} className="text-emerald-400 flex-shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-emerald-400">{t('verified')}</p>
+                  <p className="text-[11px] text-textSubtle mt-0.5">Full trading access · All limits unlocked</p>
+                </div>
+              </div>
+            ) : (
               <button
-                onClick={() => { Haptic.tap(); onNavigateToKyc(); }}
-                className="mt-3 w-full h-11 bg-neon text-black text-sm font-bold rounded-full flex items-center justify-center gap-2 active:scale-95 transition-transform"
+                onClick={() => { Haptic.tap(); onNavigateToKyc?.(); }}
+                className="w-full px-4 py-3.5 rounded-2xl bg-neon/[0.06] border border-neon/[0.18] flex items-center gap-3 active:scale-[0.99] transition-transform text-left"
               >
-                <ShieldCheck size={14} />
-                {t('verify_btn')}
+                <ShieldAlert size={18} className="text-neon flex-shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-neon">{t('verification_required')}</p>
+                  <p className="text-[11px] text-textSubtle mt-0.5">Verify to unlock withdrawals & higher limits</p>
+                </div>
+                <ChevronRight size={16} className="text-neon/50 flex-shrink-0" />
               </button>
             )}
           </div>
@@ -164,22 +160,22 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
           <p className="text-xs text-neutral-500 mb-5">{t('open_from_web_hint')}</p>
         )}
 
-        {/* Stats (glass cards) */}
+        {/* Stats */}
         <div className="grid grid-cols-3 gap-2 mb-6">
-          <div className="bg-[#0a0d14] border border-[#131722] rounded-2xl px-3 py-3 text-center">
+          <div className="bg-surface border border-border rounded-2xl px-3 py-3 text-center">
             <Trophy size={14} className="text-up mx-auto mb-1" />
-            <span className="text-sm font-bold text-white tabular-nums">{wins}</span>
-            <p className="text-xs text-neutral-500 uppercase tracking-wider mt-0.5">{t('wins')}</p>
+            <span className="text-sm font-bold text-textPrimary tabular-nums">{wins}</span>
+            <p className="text-[10px] text-textSubtle uppercase tracking-wider mt-0.5">{t('wins')}</p>
           </div>
-          <div className="bg-[#0a0d14] border border-[#131722] rounded-2xl px-3 py-3 text-center">
-            <XCircle size={14} className="text-red-500/80 mx-auto mb-1" />
-            <span className="text-sm font-bold text-white tabular-nums">{losses}</span>
-            <p className="text-xs text-neutral-500 uppercase tracking-wider mt-0.5">{t('losses')}</p>
+          <div className="bg-surface border border-border rounded-2xl px-3 py-3 text-center">
+            <XCircle size={14} className="text-down/80 mx-auto mb-1" />
+            <span className="text-sm font-bold text-textPrimary tabular-nums">{losses}</span>
+            <p className="text-[10px] text-textSubtle uppercase tracking-wider mt-0.5">{t('losses')}</p>
           </div>
-          <div className="bg-[#0a0d14] border border-[#131722] rounded-2xl px-3 py-3 text-center">
+          <div className="bg-surface border border-border rounded-2xl px-3 py-3 text-center">
             <BarChart3 size={14} className="text-neon/80 mx-auto mb-1" />
-            <span className="text-sm font-bold text-white tabular-nums">{winRate}%</span>
-            <p className="text-xs text-neutral-500 uppercase tracking-wider mt-0.5">{t('winrate')}</p>
+            <span className="text-sm font-bold text-textPrimary tabular-nums">{winRate}%</span>
+            <p className="text-[10px] text-textSubtle uppercase tracking-wider mt-0.5">{t('winrate')}</p>
           </div>
         </div>
 
@@ -343,7 +339,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
             {/* Регуляторы */}
             <section>
               <h3 className="text-xs font-semibold text-textSecondary uppercase tracking-cap mb-2 flex items-center gap-2">
-                <ShieldAlert size={14} className="text-amber-400" />
+                <ShieldAlert size={14} className="text-textMuted" />
                 {t('legal_regulators')}
               </h3>
               <div className="space-y-2">

@@ -10,7 +10,7 @@ import {
   ArrowDownRight,
   ArrowDownLeft,
   ArrowUpRight as ArrowUpRightIcon,
-  Sparkles,
+  Activity,
   Coins,
 } from 'lucide-react';
 import Skeleton from '../components/Skeleton';
@@ -320,7 +320,7 @@ const DealsPage: React.FC<DealsPageProps> = ({
           </button>
         </div>
 
-        <div className="flex gap-1 mt-4 p-1 rounded-full bg-[#0a0d14] border border-[#131722]">
+        <div className="flex gap-1 mt-4 p-1 rounded-full bg-surface border border-border">
           {tabs.map(({ id, label, count }) => (
             <button
               key={id}
@@ -602,7 +602,7 @@ const DealsPage: React.FC<DealsPageProps> = ({
                   <div className="flex items-end justify-between gap-2 px-0.5 mb-2.5">
                     <div className="flex items-center gap-2 min-w-0">
                       <div className="h-9 w-9 rounded-xl bg-neon/12 flex items-center justify-center shrink-0">
-                        <Sparkles size={18} className="text-neon" aria-hidden />
+                        <Activity size={18} className="text-neon" aria-hidden />
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
@@ -705,7 +705,7 @@ const DealsPage: React.FC<DealsPageProps> = ({
                             }}
                             className="w-full text-left px-3 py-3.5 flex items-center gap-3 min-h-[64px] active:bg-[#121723] transition-colors"
                           >
-                            <div className="h-11 w-11 shrink-0 rounded-xl bg-[#0a0d14] border border-[#131722] flex items-center justify-center">
+                            <div className="h-11 w-11 shrink-0 rounded-xl bg-surface border border-border flex items-center justify-center">
                               <span className="text-[10px] font-mono font-bold text-emerald-400">{initials}</span>
                             </div>
                             <div className="min-w-0 flex-1">

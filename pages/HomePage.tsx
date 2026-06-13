@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLanguage } from '../context/LanguageContext';
 import AssetTable from '../components/AssetTable';
 import Skeleton from '../components/Skeleton';
@@ -6,20 +6,13 @@ import { MOCK_ASSETS } from '../constants';
 import { Asset, PageView, type NavigateToTradingOptions } from '../types';
 import { useLiveAssets } from '../utils/useLiveAssets';
 import {
-  Gift,
   Headphones,
-  MoreHorizontal,
-  Rocket,
   Search,
-  Sparkles,
-  Ticket,
   User,
-  Users,
-  Wallet,
   ArrowDownLeft,
-  ArrowUpRight,
   Scan,
-  Gem,
+  Percent,
+  Plus,
 } from 'lucide-react';
 import { Haptic } from '../utils/haptics';
 import { useCurrency } from '../context/CurrencyContext';
@@ -43,9 +36,28 @@ const HomePage: React.FC<HomePageProps> = ({ balance, balanceLoading = false, us
   const { t } = useLanguage();
   const { formatPrice, currencyCode } = useCurrency();
   const liveAssets = useLiveAssets(MOCK_ASSETS);
+  const promoTickers = useMemo(() => {
+    const symbols = ['BTC', 'ETH', 'SOL'];
+    return symbols.map((sym) => {
+      const a = liveAssets.find((x) => x.ticker === sym);
+      return { sym, price: a?.price ?? null, change: a?.change24h ?? null };
+    });
+  }, [liveAssets]);
 
   const [searchValue, setSearchValue] = useState('GOLD(XAUT)');
   const topBarHidden = useHideOnScroll();
+  const prevBalance = useRef<number | null>(null);
+  const [balanceFlash, setBalanceFlash] = useState('');
+  useEffect(() => {
+    if (prevBalance.current !== null && prevBalance.current !== balance) {
+      const cls = balance > prevBalance.current ? 'value-flash-up' : 'value-flash-down';
+      setBalanceFlash(cls);
+      const id = window.setTimeout(() => setBalanceFlash(''), 350);
+      prevBalance.current = balance;
+      return () => window.clearTimeout(id);
+    }
+    prevBalance.current = balance;
+  }, [balance]);
 
   const totalAssetsText = useMemo(() => {
     const n = Number(balance);
@@ -93,7 +105,7 @@ const HomePage: React.FC<HomePageProps> = ({ balance, balanceLoading = false, us
   }, [user?.user_id, user?.referrer_id, promoTick]);
 
   return (
-    <div className="flex flex-col min-h-full animate-fade-in px-4 lg:px-6 lg:max-w-5xl mx-auto pb-28 lg:pb-12">
+    <div className="flex flex-col min-h-full animate-fade-in px-4 lg:px-6 lg:max-w-5xl mx-auto pb-28 lg:pb-8">
       {/* Top bar (как у MEXC) */}
       <header
         className={[
@@ -161,7 +173,7 @@ const HomePage: React.FC<HomePageProps> = ({ balance, balanceLoading = false, us
               {balanceLoading ? (
                 <Skeleton className="w-28 h-8 rounded-lg bg-card/60" />
               ) : (
-                <span className="text-3xl font-semibold tracking-tight text-ink tabular-nums leading-[1]">
+                <span className={`text-3xl font-semibold tracking-tight text-ink tabular-nums leading-[1] rounded-lg px-1 ${balanceFlash}`}>
                   {totalAssetsText}
                 </span>
               )}
@@ -209,7 +221,7 @@ const HomePage: React.FC<HomePageProps> = ({ balance, balanceLoading = false, us
         <div className="grid grid-cols-4 gap-2">
           {[
             { label: t('deposit'), Icon: ArrowDownLeft, badge: null, onClick: () => onNavigate('DEPOSIT') },
-            { label: t('staking_title'), Icon: Gem, badge: null, onClick: () => onNavigate('STAKING') },
+            { label: t('staking_title'), Icon: Percent, badge: null, onClick: () => onNavigate('STAKING') },
             { label: t('quick_scan'), Icon: Scan, badge: null, onClick: () => onNavigate('QR_SCANNER') },
             { label: t('profile'), Icon: User, badge: null, onClick: () => onNavigate('PROFILE') },
           ].map(({ label, Icon, badge, onClick }) => (
@@ -235,6 +247,9 @@ const HomePage: React.FC<HomePageProps> = ({ balance, balanceLoading = false, us
         </div>
       </section>
 
+      {/* Desktop two-column: promo + assets */}
+      <div className="lg:grid lg:grid-cols-[1fr_1fr] lg:gap-5 lg:items-start">
+
       {/* Special offer */}
       <section className="pb-5">
         <button
@@ -251,31 +266,88 @@ const HomePage: React.FC<HomePageProps> = ({ balance, balanceLoading = false, us
             try { localStorage.removeItem('etoro_active_deposit'); } catch {}
             onNavigate('DEPOSIT');
           }}
-          className="w-full text-left rounded-2xl overflow-hidden exchange-card active:scale-[0.99] transition-transform"
+          className="w-full text-left rounded-2xl overflow-hidden active:scale-[0.99] transition-transform"
+          style={{ background: 'linear-gradient(135deg, #0d1b35 0%, #0a1628 55%, #060e1c 100%)' }}
           aria-label={t('special_offer')}
         >
-          <div className="relative">
-            <img
-              src={workerEvent?.image_url || "/mexc-special-offer.jpg"}
-              alt=""
-              className="w-full h-[160px] sm:h-[180px] object-cover"
-              loading="lazy"
-              decoding="async"
-            />
-            {!workerEvent && <div className="absolute inset-0 bg-gradient-to-r from-black/55 via-black/15 to-transparent" />}
-
-            <div className="absolute left-3 top-3 flex items-center gap-2 rounded-full bg-black/35 backdrop-blur px-2.5 py-1.5">
-              <img src="/mexc-logo.png" alt="" className="h-4 w-auto opacity-95" />
-              <span className="text-[11px] font-semibold text-white/90">{workerEvent ? workerEvent.title : t('special_offer')}</span>
+          {workerEvent ? (
+            /* Worker event: still show image if provided */
+            <div className="relative h-[160px] sm:h-[180px] overflow-hidden">
+              <img
+                src={workerEvent.image_url}
+                alt=""
+                className="absolute inset-0 w-full h-full object-cover"
+                loading="lazy"
+                decoding="async"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+              <div className="absolute left-3 top-3 flex items-center gap-2 rounded-full bg-black/40 backdrop-blur px-2.5 py-1.5">
+                <img src="/mexc-logo.png" alt="" className="h-4 w-auto opacity-95" />
+                <span className="text-[11px] font-semibold text-white/90">{workerEvent.title}</span>
+              </div>
+              {workerEvent.bonus && (
+                <div className="absolute left-4 bottom-4 inline-flex items-center gap-2 px-3 h-8 rounded-full bg-neon text-black text-xs font-bold">
+                  {workerEvent.bonus}
+                  <Plus size={12} />
+                </div>
+              )}
             </div>
+          ) : (
+            /* Default: pure code-based card */
+            <div className="relative h-[160px] sm:h-[180px] overflow-hidden">
+              {/* Ambient glow */}
+              <div className="absolute -right-12 -top-12 w-64 h-64 rounded-full pointer-events-none"
+                style={{ background: 'radial-gradient(circle, rgba(43,130,246,0.18) 0%, transparent 65%)' }} />
+              <div className="absolute left-1/3 bottom-0 w-48 h-32 pointer-events-none"
+                style={{ background: 'radial-gradient(circle, rgba(43,130,246,0.08) 0%, transparent 70%)' }} />
 
-            <div className="absolute left-4 bottom-4">
-              <div className="inline-flex items-center gap-2 px-3 h-8.5 rounded-full bg-neon text-black text-xs font-bold">
-                {workerEvent?.bonus ? workerEvent.bonus : t('quick_deposit')}
-                <ArrowDownLeft size={14} />
+              {/* SVG grid */}
+              <svg className="absolute inset-0 w-full h-full opacity-[0.045]" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                  <pattern id="grid" width="28" height="28" patternUnits="userSpaceOnUse">
+                    <path d="M 28 0 L 0 0 0 28" fill="none" stroke="white" strokeWidth="0.5"/>
+                  </pattern>
+                </defs>
+                <rect width="100%" height="100%" fill="url(#grid)" />
+              </svg>
+
+              {/* Live tickers */}
+              <div className="absolute right-4 top-4 flex flex-col items-end gap-1.5">
+                {promoTickers.map(({ sym, price, change }) => (
+                  <div key={sym} className="flex items-center gap-1.5">
+                    <span className="text-[9px] font-mono text-textMuted">{sym}/USDT</span>
+                    {change !== null ? (
+                      <span className={`text-[10px] font-mono font-semibold ${change >= 0 ? 'text-up' : 'text-down'}`}>
+                        {change >= 0 ? '+' : ''}{change.toFixed(2)}%
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-mono text-textMuted">—</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Main content */}
+              <div className="absolute inset-0 p-4 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <img src="/mexc-logo.png" alt="" className="h-4 w-auto opacity-90" />
+                    <span className="text-[10px] font-mono tracking-widest text-neon/70 uppercase">Deposit</span>
+                  </div>
+                  <div className="text-[22px] font-bold text-white tracking-tight leading-none">
+                    {t('special_offer')}
+                  </div>
+                  <div className="text-[12px] text-textSecondary mt-1.5">
+                    50+ assets · Instant funding
+                  </div>
+                </div>
+                <div className="inline-flex items-center gap-2 px-3.5 h-8 rounded-full bg-neon text-black text-[12px] font-bold self-start">
+                  {t('quick_deposit')}
+                  <ArrowDownLeft size={12} />
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </button>
 
         <CryptoBannerWidget />
@@ -289,7 +361,7 @@ const HomePage: React.FC<HomePageProps> = ({ balance, balanceLoading = false, us
             showCloseButton
             stickyHeader={false}
             showHeaderDivider={false}
-            contentClassName="bg-[#06090e] max-w-none"
+            contentClassName="bg-background max-w-none"
           >
             <div className="-m-4">
               <div className="relative w-full aspect-video bg-black/40 overflow-hidden">
@@ -304,7 +376,7 @@ const HomePage: React.FC<HomePageProps> = ({ balance, balanceLoading = false, us
                 {workerEvent.bonus ? (
                   <div className="absolute left-4 bottom-4 inline-flex items-center gap-2 px-3 h-8.5 rounded-full bg-neon text-black text-xs font-bold">
                     {workerEvent.bonus}
-                    <Gift size={14} />
+                    <Plus size={14} />
                   </div>
                 ) : null}
               </div>
@@ -345,6 +417,8 @@ const HomePage: React.FC<HomePageProps> = ({ balance, balanceLoading = false, us
           </div>
         )}
       </section>
+
+      </div>{/* end desktop two-column */}
     </div>
   );
 };

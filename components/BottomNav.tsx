@@ -7,7 +7,6 @@ import { NavHomeIcon, NavMarketsIcon, NavTradeIcon, NavWalletIcon } from './icon
 interface BottomNavProps {
   currentPage: PageView;
   onNavigate: (page: PageView) => void;
-  /** When true, outer shell (fixed / glass) is provided by Layout — ribbon + dock share one panel */
   embedded?: boolean;
 }
 
@@ -27,16 +26,16 @@ const pageToNav: Partial<Record<PageView, PageView>> = {
 const BottomNav: React.FC<BottomNavProps> = ({ currentPage, onNavigate, embedded = false }) => {
   const { t } = useLanguage();
   const navItems: NavItem[] = [
-    { id: 'HOME', label: t('nav_home'), icon: NavHomeIcon },
-    { id: 'COINS', label: t('nav_coins'), icon: NavMarketsIcon },
+    { id: 'HOME',    label: t('nav_home'),    icon: NavHomeIcon },
+    { id: 'COINS',   label: t('nav_coins'),   icon: NavMarketsIcon },
     { id: 'TRADING', label: t('nav_trading'), icon: NavTradeIcon },
-    { id: 'DEALS', label: t('nav_deals'), icon: NavWalletIcon },
+    { id: 'DEALS',   label: t('nav_deals'),   icon: NavWalletIcon },
   ];
 
   const activeNav = pageToNav[currentPage] ?? currentPage;
 
   const navBody = (
-    <div className="flex justify-around items-stretch min-h-[56px] px-2 pt-1 pb-1">
+    <div className="flex items-stretch min-h-[52px] px-1">
       {navItems.map((item) => {
         const isActive = activeNav === item.id;
         const Icon = item.icon;
@@ -44,16 +43,13 @@ const BottomNav: React.FC<BottomNavProps> = ({ currentPage, onNavigate, embedded
           <button
             key={item.id}
             onClick={() => { Haptic.medium(); onNavigate(item.id); }}
-            className={`relative touch-target nav-item flex flex-col items-center justify-center flex-1 min-w-0 gap-1 py-2 ${isActive ? 'text-textPrimary' : 'text-textSubtle hover:text-textSecondary transition-colors'}`}
+            className={`relative flex flex-col items-center justify-center flex-1 min-w-0 py-2 gap-1 transition-colors ${
+              isActive ? 'text-accent' : 'text-textSubtle'
+            }`}
             aria-current={isActive ? 'page' : undefined}
           >
-            {isActive && (
-              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-[3px] bg-accent rounded-b-full" />
-            )}
-            <div className="flex items-center justify-center h-8 w-10 mt-1">
-              <Icon active={isActive} size={22} />
-            </div>
-            <span className="text-[10px] font-semibold tracking-wide w-full text-center leading-none mt-0.5">
+            <Icon active={isActive} size={21} />
+            <span className={`text-[9.5px] font-medium leading-none ${isActive ? 'text-accent' : 'text-textSubtle'}`}>
               {item.label}
             </span>
           </button>
@@ -68,10 +64,8 @@ const BottomNav: React.FC<BottomNavProps> = ({ currentPage, onNavigate, embedded
 
   return (
     <nav
-      className="fixed left-0 right-0 bottom-0 z-50 nav-glass border-t border-white/[0.025]"
-      style={{
-        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
-      }}
+      className="fixed left-0 right-0 bottom-0 z-50 nav-glass"
+      style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
     >
       {navBody}
     </nav>

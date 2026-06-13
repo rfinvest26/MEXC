@@ -27,7 +27,7 @@ const SplashScreen: React.FC = () => {
   return (
     <div
       className="fixed inset-0 z-[9999] flex flex-col items-center justify-center select-none"
-      style={{ background: '#06090e' }}
+      style={{ background: 'var(--color-background)' }}
     >
       {/* Matte ambient depth light */}
       <div

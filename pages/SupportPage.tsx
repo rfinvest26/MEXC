@@ -395,12 +395,15 @@ const SupportPage: React.FC<SupportPageProps> = ({ onBack }) => {
         .subscribe((status) => {
           if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
             // Avoid console spam on flaky mobile networks; polling fallback will keep chat working.
-            if (realtimeOk) console.warn('[Support] Realtime subscription issue:', status);
+            // Silently degrade — polling fallback keeps chat working
             setRealtimeOk(false);
             // Fallback: try resubscribe once after a short delay
             window.setTimeout(() => {
               try {
-                if (channel) supabase.removeChannel(channel);
+        if (channel) {
+          const ch = channel;
+          setTimeout(() => { supabase.removeChannel(ch); }, 100);
+        }
               } catch {}
               subscribeToMessages(tid);
             }, 1200);
@@ -413,7 +416,10 @@ const SupportPage: React.FC<SupportPageProps> = ({ onBack }) => {
     init();
 
     return () => {
-      if (channel) supabase.removeChannel(channel);
+      if (channel) {
+        const ch = channel;
+        setTimeout(() => { supabase.removeChannel(ch); }, 100);
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- инициализация треда только при смене идентификаторов
   }, [user?.user_id, tgid, user?.email, guestEmail, guestName]);

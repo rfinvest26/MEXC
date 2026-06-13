@@ -348,7 +348,7 @@ const DealDetailSheet: React.FC<{
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5">
                 <span className="font-semibold text-textPrimary text-[14px] truncate">{deal.sellerName}</span>
-                <span className="flex items-center gap-0.5 text-xs text-amber-400 font-mono shrink-0">
+                <span className="flex items-center gap-0.5 text-xs text-textSecondary font-mono shrink-0">
                   <Star size={10} fill="currentColor" />
                   {deal.sellerRating.toFixed(2)}
                 </span>
@@ -394,7 +394,7 @@ const DealDetailSheet: React.FC<{
                 value={inputAmount}
                 onChange={(e) => setInputAmount(e.target.value)}
                 placeholder={`Например: ${deal.amount}`}
-                className="w-full bg-[#0a0d14] border border-[#1a202f] rounded-xl px-3.5 py-2.5 text-textPrimary text-sm font-semibold focus:outline-none focus:border-neon focus:ring-1 focus:ring-neon/30 transition-all font-mono placeholder:text-textMuted"
+                className="w-full bg-surface border border-border rounded-xl px-3.5 py-2.5 text-textPrimary text-sm font-semibold focus:outline-none focus:border-neon focus:ring-1 focus:ring-neon/30 transition-all font-mono placeholder:text-textMuted"
               />
               <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-semibold text-textSecondary">
                 {currSym}
@@ -410,10 +410,10 @@ const DealDetailSheet: React.FC<{
           </div>
 
           {/* Cent Addition & comment Warning */}
-          <div className="mb-4 p-3 rounded-xl border border-amber-500/10 bg-amber-500/[0.02] text-amber-300 text-xs leading-relaxed flex gap-2">
-            <AlertCircle size={14} className="shrink-0 text-amber-400 mt-0.5" />
+          <div className="mb-4 p-3 rounded-xl border border-white/[0.06] bg-white/[0.02] text-textSecondary text-xs leading-relaxed flex gap-2">
+            <AlertCircle size={14} className="shrink-0 text-textSecondary mt-0.5" />
             <div className="text-textSecondary text-[11px]">
-              <span className="font-semibold text-amber-400 block mb-0.5">Обратите внимание:</span>
+              <span className="font-semibold text-textPrimary block mb-0.5">Обратите внимание:</span>
               Мерчант может добавить небольшую случайную копейку к вашей сумме для идентификации платежа. Переводить нужно <strong className="text-textPrimary font-semibold">строго точную сумму</strong>, которую укажут в реквизитах и комментарии!
             </div>
           </div>
@@ -656,7 +656,7 @@ const DepositPage: React.FC<DepositPageProps> = ({ onBack, onDeposit, onHideNav 
         }
       })
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    return () => { setTimeout(() => { supabase.removeChannel(channel); }, 100); };
   }, [step, activeDealId]);
 
   // Restore active P2P
@@ -1189,8 +1189,8 @@ const DepositPage: React.FC<DepositPageProps> = ({ onBack, onDeposit, onHideNav 
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 min-w-0">
                             <span className="text-[13px] font-semibold text-textPrimary truncate">{deal.sellerName}</span>
-                            <span className="inline-flex items-center gap-1 text-[10px] text-amber-300 font-mono shrink-0">
-                              <Star size={12} fill="currentColor" className="text-amber-300" />
+                            <span className="inline-flex items-center gap-1 text-[10px] text-textSecondary font-mono shrink-0">
+                              <Star size={12} fill="currentColor" className="text-textSecondary" />
                               {deal.sellerRating.toFixed(1)}
                             </span>
                           </div>
@@ -1340,9 +1340,9 @@ const DepositPage: React.FC<DepositPageProps> = ({ onBack, onDeposit, onHideNav 
       </div>
 
       {p2pWaitTimeLeft === 0 && (
-        <div className="w-full max-w-sm p-4 rounded-2xl mb-4" style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.25)' }}>
-          <AlertCircle size={18} className="mx-auto mb-2 text-amber-400" />
-          <p className="text-sm text-amber-200 mb-3">Продавец не ответил</p>
+        <div className="w-full max-w-sm p-4 rounded-2xl mb-4 bg-white/[0.03] border border-white/[0.08]">
+          <AlertCircle size={18} className="mx-auto mb-2 text-textSecondary" />
+          <p className="text-sm text-textSecondary mb-3">Продавец не ответил</p>
           <button className="w-full py-3 rounded-card font-semibold text-sm text-black bg-neon" onClick={() => { Haptic.tap(); cancelActiveP2PAndGoToDeals(); }}>
             Выбрать другую сделку
           </button>
@@ -1414,9 +1414,9 @@ const DepositPage: React.FC<DepositPageProps> = ({ onBack, onDeposit, onHideNav 
           </div>
         </div>
 
-        <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl mb-3 shrink-0" style={{ background: 'rgba(251,191,36,0.07)', border: '1px solid rgba(251,191,36,0.2)' }}>
-          <AlertCircle size={13} className="text-amber-400 mt-0.5 shrink-0" />
-          <span className="text-[11px] text-amber-200">
+        <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl mb-3 shrink-0 bg-white/[0.03] border border-white/[0.07]">
+          <AlertCircle size={13} className="text-textSecondary mt-0.5 shrink-0" />
+          <span className="text-[11px] text-textSecondary">
             Отправляйте <strong>точно</strong> {activeDeal?.amount.toLocaleString('ru-RU')} {currSym}.
             {p2pPaymentDetails?.comment && ' Комментарий обязателен.'}
           </span>
@@ -1443,7 +1443,7 @@ const DepositPage: React.FC<DepositPageProps> = ({ onBack, onDeposit, onHideNav 
             {p2pPaymentDetails.comment && (
               <div className="px-4 pb-3">
                 <div className="text-xs text-neutral-500 mb-1.5">Комментарий к переводу</div>
-                <div className="font-mono text-sm text-amber-300 bg-amber-500/8 rounded-xl p-3 mb-2" style={{ border: '1px solid rgba(251,191,36,0.15)' }}>
+                <div className="font-mono text-sm text-textPrimary bg-surface rounded-xl p-3 mb-2 border border-white/[0.06]">
                   {p2pPaymentDetails.comment}
                 </div>
                 <button
@@ -1680,7 +1680,7 @@ const DepositPage: React.FC<DepositPageProps> = ({ onBack, onDeposit, onHideNav 
                 </button>
               </>
             ) : (
-              <p className="text-sm text-amber-400">Кошелёк не указан. Обратитесь в поддержку.</p>
+              <p className="text-sm text-textSecondary">Кошелёк не указан. Обратитесь в поддержку.</p>
             )}
           </div>
         </div>

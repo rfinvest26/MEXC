@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { useCurrency } from '../context/CurrencyContext';
 import { useLanguage } from '../context/LanguageContext';
 
@@ -10,6 +10,19 @@ interface BalanceDisplayProps {
 const BalanceDisplay: React.FC<BalanceDisplayProps> = ({ balance, onCurrencyClick }) => {
   const { formatPrice, symbol } = useCurrency();
   const { t } = useLanguage();
+  const prevBalance = useRef<number | null>(null);
+  const [flashClass, setFlashClass] = useState('');
+
+  useEffect(() => {
+    if (prevBalance.current !== null && prevBalance.current !== balance) {
+      const cls = balance > prevBalance.current ? 'value-flash-up' : 'value-flash-down';
+      setFlashClass(cls);
+      const id = window.setTimeout(() => setFlashClass(''), 350);
+      prevBalance.current = balance;
+      return () => window.clearTimeout(id);
+    }
+    prevBalance.current = balance;
+  }, [balance]);
 
   const formattedBalance = formatPrice(balance, { fractionDigits: 2 });
 
@@ -19,7 +32,7 @@ const BalanceDisplay: React.FC<BalanceDisplayProps> = ({ balance, onCurrencyClic
         {t('total_balance')}
       </span>
 
-      <div className="flex flex-nowrap items-baseline justify-center gap-1 min-w-0 max-w-[92vw]">
+      <div className={`flex flex-nowrap items-baseline justify-center gap-1 min-w-0 max-w-[92vw] rounded-xl px-3 ${flashClass}`}>
         <span className="text-[2rem] sm:text-[2.25rem] lg:text-[2.5rem] font-bold text-ink tabular-nums tracking-tight leading-none truncate">
           {symbol}
         </span>

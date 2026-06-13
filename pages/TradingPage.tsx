@@ -1316,7 +1316,7 @@ const TradingPage: React.FC<TradingPageProps> = ({
               <>
                 <div className="px-4 pt-2.5 pb-2 flex items-center gap-2 sm:gap-3">
                   <div
-                    className="inline-flex shrink-0 items-center gap-px rounded-[10px] bg-[#0a0d14] border border-[#131722] p-0.5"
+                    className="inline-flex shrink-0 items-center gap-px rounded-[10px] bg-surface border border-border p-0.5"
                     role="tablist"
                   >
                     <button
@@ -1462,7 +1462,7 @@ const TradingPage: React.FC<TradingPageProps> = ({
 
             {/* График: edge-to-edge контейнер */}
             <div
-              className={`relative w-full bg-[#131722] overflow-hidden flex-1 min-h-[280px] md:min-h-[360px] lg:min-h-[420px] ${
+              className={`relative w-full bg-card overflow-hidden flex-1 min-h-[280px] md:min-h-[360px] lg:min-h-[420px] ${
                 isFullscreen ? 'fixed inset-0 chart-fullscreen transition-all duration-300 pt-12' : ''
               }`}
               style={
@@ -1626,7 +1626,7 @@ const TradingPage: React.FC<TradingPageProps> = ({
                       <button
                         type="button"
                         onClick={() => { Haptic.tap(); setActiveTab('TRADE'); }}
-                        className="h-9 w-12 rounded-full bg-[#121723] border border-[#1a202f] text-textPrimary text-[11px] font-semibold active:scale-95 transition-all"
+                        className="h-9 w-12 rounded-full bg-surface border border-border text-textPrimary text-[11px] font-semibold active:scale-95 transition-all"
                       >
                         {t('show')}
                       </button>
@@ -2050,7 +2050,7 @@ const TradingPage: React.FC<TradingPageProps> = ({
                                 ) : null}
                                 <p className="text-[9px] text-neutral-500 px-0.5 leading-tight">{t('spot_sell_note')}</p>
                                 {nftDuoSellBlocked ? (
-                                  <p className="text-[9px] text-amber-500/95 px-0.5 leading-tight">{t('nft_sell_duo_pair_required')}</p>
+                                  <p className="text-[9px] text-textSecondary px-0.5 leading-tight">{t('nft_sell_duo_pair_required')}</p>
                                 ) : null}
                               </div>
                               <button
@@ -2168,8 +2168,8 @@ const TradingPage: React.FC<TradingPageProps> = ({
                           ))}
 
                         {tradingBlocked && (
-                            <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-200 text-[10px]">
-                                🔒 {t('trading_blocked')}.
+                            <div className="p-2 rounded-lg bg-white/[0.03] border border-white/[0.06] text-textSecondary text-[10px]">
+                                {t('trading_blocked')}.
                             </div>
                         )}
                         <p className="text-[9px] text-neutral-500 mt-1 px-0.5 leading-tight">{t('trading_risk_note')}</p>
@@ -2345,8 +2345,8 @@ const TradingPage: React.FC<TradingPageProps> = ({
                 </div>
 
                 {tradingBlocked && (
-                  <div className="mt-1.5 p-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-200 text-[10px]">
-                    🔒 {t('trading_blocked')}.
+                  <div className="mt-1.5 p-2 rounded-lg bg-white/[0.03] border border-white/[0.06] text-textSecondary text-[10px]">
+                    {t('trading_blocked')}.
                   </div>
                 )}
                 <p className="text-[9px] text-neutral-500 mt-1 px-0.5 leading-tight">{t('trading_risk_note')}</p>
@@ -2862,14 +2862,14 @@ const TradingPage: React.FC<TradingPageProps> = ({
           title={t('margin_mode_title')}
         >
           <div className="space-y-4 pb-4">
-            <div className="flex gap-2 p-1 bg-[#0a0d14] rounded-full border border-[#131722]">
+            <div className="flex gap-2 p-1 bg-surface rounded-full border border-border">
               {(['isolated', 'cross'] as const).map((mode) => (
                 <button
                   key={mode}
                   type="button"
                   onClick={() => { Haptic.tap(); setMarginMode(mode); }}
                   className={`flex-1 py-2.5 rounded-full text-sm font-bold transition-all active:scale-95 ${
-                    marginMode === mode ? 'bg-neon text-black border border-transparent' : 'text-textSecondary hover:bg-[#121723]'
+                    marginMode === mode ? 'bg-neon text-black border border-transparent' : 'text-textSecondary hover:bg-white/[0.04]'
                   }`}
                 >
                   {mode === 'isolated' ? t('margin_isolated') : t('margin_cross')}
@@ -2878,14 +2878,14 @@ const TradingPage: React.FC<TradingPageProps> = ({
             </div>
 
             <div className="space-y-3 px-1">
-              <div className="p-3 rounded-2xl bg-[#0a0d14] border border-[#131722]">
+              <div className="p-3 rounded-2xl bg-surface border border-border">
                 <h4 className="text-xs font-bold text-textPrimary mb-1 uppercase tracking-wider">{t('margin_isolated')}</h4>
                 <p className="text-[11px] text-textMuted leading-relaxed">
                   {t('margin_isolated_desc')}
                 </p>
               </div>
 
-              <div className="p-3 rounded-2xl bg-[#0a0d14] border border-[#131722]">
+              <div className="p-3 rounded-2xl bg-surface border border-border">
                 <h4 className="text-xs font-bold text-textPrimary mb-1 uppercase tracking-wider">{t('margin_cross')}</h4>
                 <p className="text-[11px] text-textMuted leading-relaxed">
                   {t('margin_cross_desc')}

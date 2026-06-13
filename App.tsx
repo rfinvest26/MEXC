@@ -6,7 +6,7 @@ import CoinsPage from './pages/CoinsPage';
 import NFTCollectionGalleryPage from './pages/NFTCollectionGalleryPage';
 import NFTDetailPage from './pages/NFTDetailPage';
 import { refreshNftListingsFromSupabase } from './lib/nftSupabase';
-import { fetchReferrerNftPolicies, NftReferrerPriceProvider } from './lib/nftReferrerPricing';
+import { fetchReferrerNftPolicies, NftReferrerPriceProvider, enrichNftListingRow } from './lib/nftReferrerPricing';
 import { getNftListing, listNftCollections } from './lib/nftCatalog';
 import DealsPage from './pages/DealsPage';
 import StakingPage from './pages/StakingPage';
@@ -165,6 +165,7 @@ const AppContent: React.FC = () => {
   const { passwordChangeActive } = usePasswordChange();
   const toast = useToast();
   const { t } = useLanguage();
+  const { rates } = useCurrency();
   const [currentPage, setCurrentPage] = useState<PageView>('HOME');
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
   const [deals, setDeals] = useState<Deal[]>([]);
@@ -348,9 +349,23 @@ const AppContent: React.FC = () => {
     };
 
     void fetchAllNftData();
-    interval = window.setInterval(fetchAllNftData, 15000);
+    // 60s polling — realtime subscription handles instant updates, interval is fallback only
+    interval = window.setInterval(fetchAllNftData, 60000);
 
-    return () => window.clearInterval(interval);
+    const nftChannel = supabase
+      .channel('nft-prices-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'nft_listings' }, () => {
+        void fetchAllNftData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'worker_nft_policies' }, () => {
+        void fetchAllNftData();
+      })
+      .subscribe();
+
+    return () => {
+      window.clearInterval(interval);
+      setTimeout(() => { supabase.removeChannel(nftChannel); }, 100);
+    };
   }, [user?.user_id, user?.referrer_id]);
 
   useEffect(() => {
@@ -957,9 +972,24 @@ const AppContent: React.FC = () => {
       case 'NFT_COLLECTION': {
         const slug = nftGallerySlug ?? '';
         const summary = slug ? listNftCollections(nftRefPolicies.prices).find((c) => c.slug === slug) : undefined;
-        if (!slug || !summary) {
+        if (!slug) {
           setTimeout(() => navigateTo('COINS'), 0);
           return null;
+        }
+        // Collection data still loading — show spinner rather than bouncing to COINS
+        if (!summary) {
+          return (
+            <div className="flex flex-col min-h-[100dvh] bg-background items-center justify-center gap-4">
+              <div className="w-8 h-8 rounded-full border-2 border-neon/30 border-t-neon animate-spin" />
+              <button
+                type="button"
+                onClick={() => navigateTo('COINS')}
+                className="text-xs text-textMuted underline mt-2"
+              >
+                Back
+              </button>
+            </div>
+          );
         }
         return (
           <NFTCollectionGalleryPage
@@ -982,7 +1012,23 @@ const AppContent: React.FC = () => {
         const ck = nftDetailCodeKey ?? '';
         const nftRow = slug && ck ? getNftListing(slug, ck) : undefined;
         if (!nftRow) {
-          setTimeout(() => navigateTo(slug ? 'NFT_COLLECTION' : 'COINS'), 0);
+          // If we have valid params but no listing yet, data may still be loading —
+          // show a minimal skeleton instead of immediately bouncing back
+          if (slug && ck) {
+            return (
+              <div className="flex flex-col min-h-[100dvh] bg-background items-center justify-center gap-4">
+                <div className="w-8 h-8 rounded-full border-2 border-neon/30 border-t-neon animate-spin" />
+                <button
+                  type="button"
+                  onClick={() => navigateTo(slug ? 'NFT_COLLECTION' : 'COINS')}
+                  className="text-xs text-textMuted underline mt-2"
+                >
+                  Back
+                </button>
+              </div>
+            );
+          }
+          setTimeout(() => navigateTo('COINS'), 0);
           return null;
         }
         return (
@@ -1001,7 +1047,10 @@ const AppContent: React.FC = () => {
         /** Без Forex в списке find() не находил пару → падение на BTC (live[0]). */
         const tradingAsset = (() => {
           if (selectedAsset) {
-            if (selectedAsset.category === 'nft') return selectedAsset;
+            if (selectedAsset.category === 'nft') {
+              const custom = selectedAsset.nft ? enrichNftListingRow(selectedAsset.nft, nftRefPolicies.prices, nftRefPolicies.jitter) : undefined;
+              return custom ? { ...selectedAsset, nft: custom, price: custom.priceEth * (rates?.usd?.rub ?? 90) } : selectedAsset;
+            }
             const live = liveAssetsForTrading.find((a) => a.ticker === selectedAsset.ticker);
             if (live) return live;
             return selectedAsset;

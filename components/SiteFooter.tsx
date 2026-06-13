@@ -31,7 +31,7 @@ const SiteFooter: React.FC = () => {
           {t('secure_connection')}
         </span>
         <span className="flex items-center gap-1">
-          <Zap size={12} className="text-amber-500/80" />
+          <Zap size={12} className="text-textMuted" />
           {t('fast_withdraw')}
         </span>
       </div>

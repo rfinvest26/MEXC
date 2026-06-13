@@ -48,11 +48,18 @@ const SidebarNav: React.FC<SidebarNavProps> = ({ currentPage, onNavigate }) => {
   const balanceLoading = Boolean(loading && (tgid || webUserId));
 
   return (
-    <aside className="hidden lg:flex flex-col w-60 min-w-[15rem] shrink-0 bg-background border-r border-border/40">
-      <div className="sticky top-0 flex flex-col h-screen py-6 px-3">
+    <aside className="hidden lg:flex flex-col w-60 min-w-[15rem] shrink-0 sidebar-glass">
+      <div className="sticky top-0 flex flex-col h-screen py-5 px-3">
+
+        {/* Brand */}
+        <div className="px-3 pb-4 mb-1 flex items-center justify-between">
+          <img src="/mexc-logo.svg" alt="MEXC" className="h-6 w-auto" draggable={false} />
+          <span className="live-badge"><span className="live-dot" />LIVE</span>
+        </div>
+
         {/* User info block */}
         {user ? (
-          <div className="px-3 pb-4 mb-2 border-b border-border/40">
+          <div className="px-3 pb-4 mb-2 border-b border-white/[0.05]">
             <div className="flex items-center gap-2.5 mb-3">
               <UserAvatar
                 name={displayName}
@@ -70,18 +77,18 @@ const SidebarNav: React.FC<SidebarNavProps> = ({ currentPage, onNavigate }) => {
                 )}
               </div>
             </div>
-            <div className="mb-2">
+            <div className="mb-2.5">
               <p className="text-[10px] text-textMuted uppercase tracking-wide mb-0.5">{t('balance')}</p>
               {balanceLoading ? (
                 <Skeleton className="w-24 h-5 rounded bg-card/60" />
               ) : (
                 <p className="text-base font-bold text-neon font-mono">
-                  {balance.toLocaleString('ru-RU', { maximumFractionDigits: 2 })}
+                  ${balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </p>
               )}
             </div>
             <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${
-              user.is_kyc ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400'
+              user.is_kyc ? 'bg-emerald-500/10 text-emerald-400' : 'bg-accentMuted text-neon'
             }`}>
               {user.is_kyc
                 ? <><ShieldCheck size={10} />{t('verified')}</>
@@ -90,7 +97,7 @@ const SidebarNav: React.FC<SidebarNavProps> = ({ currentPage, onNavigate }) => {
             </div>
           </div>
         ) : (
-          <div className="px-3 pb-4 mb-2 border-b border-border/40 flex items-center gap-2">
+          <div className="px-3 pb-4 mb-2 border-b border-white/[0.05] flex items-center gap-2">
             <User size={16} className="text-textMuted" />
             <span className="text-xs text-textMuted">{t('guest')}</span>
           </div>
@@ -109,14 +116,14 @@ const SidebarNav: React.FC<SidebarNavProps> = ({ currentPage, onNavigate }) => {
                 key={item.id}
                 onClick={() => { Haptic.medium(); onNavigate(item.id); }}
                 title={item.label}
-                className={`cursor-pointer flex items-center gap-3 px-3 py-2.5 rounded-2xl text-left transition-colors duration-150 ${
+                className={`cursor-pointer flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-colors duration-150 ${
                   isActive
                     ? 'bg-accentMuted text-textPrimary'
                     : 'text-textSecondary hover:text-textPrimary hover:bg-white/[0.06]'
                 }`}
                 aria-current={isActive ? 'page' : undefined}
               >
-                <div className={isActive ? 'nav-icon-pill nav-active-pop rounded-2xl h-9 w-11 flex items-center justify-center text-accent' : 'rounded-2xl h-9 w-11 flex items-center justify-center text-textMuted'}>
+                <div className="flex-shrink-0 flex items-center justify-center w-6 h-6">
                   {isMexcSvg ? (
                     <Icon active={isActive} className={isActive ? 'icon-soft' : 'icon-muted'} size={20} />
                   ) : (
@@ -126,14 +133,13 @@ const SidebarNav: React.FC<SidebarNavProps> = ({ currentPage, onNavigate }) => {
                 <div className="flex-1 min-w-0">
                   <span className="font-semibold text-sm tracking-tight truncate block">{item.label}</span>
                 </div>
-                {isActive ? <span className="nav-dot nav-active-pop" aria-hidden /> : null}
               </button>
             );
           })}
         </nav>
 
         {/* Bottom actions */}
-        <div className="flex flex-col gap-0.5 pt-2 border-t border-border/40">
+        <div className="flex flex-col gap-0.5 pt-2 border-t border-white/[0.05]">
           <button
             type="button"
             title={t('support')}

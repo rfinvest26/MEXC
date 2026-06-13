@@ -150,7 +150,7 @@ const NFTCollectionGalleryPage: React.FC<NFTCollectionGalleryPageProps> = ({
         <div className="relative z-10 px-4 pt-4 pb-8 flex flex-col items-center text-center">
           {/* Avatar with Glow */}
           <div className="relative mb-6">
-            <div className="absolute inset-0 bg-neon/20 blur-xl rounded-2xl scale-110 animate-pulse" />
+            <div className="absolute inset-0 bg-neon/15 blur-2xl rounded-2xl scale-125" />
             <div className="relative w-24 h-24 rounded-2xl overflow-hidden border-2 border-white/10 shadow-2xl bg-surface">
               <img 
                 src={coverUrl} 
