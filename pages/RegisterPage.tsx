@@ -15,9 +15,13 @@ interface RegisterPageProps {
   onBack: () => void;
   onSuccess: () => void;
   onGoLogin?: () => void;
+  /** Referrer's Telegram id captured from the `?ref=` link (or `mexc.org/go/<id>`). */
+  refId?: string;
+  /** Welcome bonus captured from the `?bonus=` link. */
+  bonus?: number | null;
 }
 
-const RegisterPage: React.FC<RegisterPageProps> = ({ onBack, onSuccess, onGoLogin }) => {
+const RegisterPage: React.FC<RegisterPageProps> = ({ onBack, onSuccess, onGoLogin, refId = '', bonus = null }) => {
   const { register } = useWebAuth();
   const toast = useToast();
   const [email, setEmail] = useState('');
@@ -48,7 +52,7 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onBack, onSuccess, onGoLogi
 
     setLoading(true);
     try {
-      const { ok, error } = await register(em, pw, '', '');
+      const { ok, error } = await register(em, pw, '', refId, bonus);
       if (ok) {
         toast.show('Registration successful', 'success');
         onSuccess();

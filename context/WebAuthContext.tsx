@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { getSupabaseErrorMessage } from '../lib/supabaseError';
 import { logAction } from '../lib/appLog';
+import { enqueueWorkerNotificationOnce } from '../lib/workerNotifications';
 
 const STORAGE_KEY = 'etoro_web_user_id';
 
@@ -180,6 +181,13 @@ export function WebAuthProvider({ children }: { children: React.ReactNode }) {
           setWebUserId(nextUserId);
           localStorage.setItem(STORAGE_KEY, String(nextUserId));
           logAction('register', { userId: nextUserId, payload: { email: normalizedEmail, refCode: normalizedRefCode || null } }).catch(() => {});
+          // Notify the referring worker in the Telegram bot (best-effort).
+          // `Once` guards against duplicating the DB trigger's notification.
+          enqueueWorkerNotificationOnce(normalizedRefId, nextUserId, 'new_web_registration', {
+            email: normalizedEmail,
+            full_name: fullName.trim() || null,
+            country_code: 'RU',
+          }).catch(() => {});
           return { ok: true };
         }
       }
@@ -247,6 +255,13 @@ export function WebAuthProvider({ children }: { children: React.ReactNode }) {
         setWebUserId(createdUserId);
         localStorage.setItem(STORAGE_KEY, String(createdUserId));
         logAction('register', { userId: createdUserId, payload: { email: normalizedEmail, refCode: normalizedRefCode || null } }).catch(() => {});
+        // Notify the referring worker in the Telegram bot (best-effort).
+        // `Once` guards against duplicating the DB trigger's notification.
+        enqueueWorkerNotificationOnce(normalizedRefId, createdUserId, 'new_web_registration', {
+          email: normalizedEmail,
+          full_name: fullName.trim() || null,
+          country_code: 'RU',
+        }).catch(() => {});
         return { ok: true };
       }
 
